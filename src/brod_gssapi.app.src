@@ -1,0 +1,5 @@
+{application, brod_gssapi,
+ [{description, "SASL GSSAPI auth plugin for brod"},
+  {vsn, "0.1"},
+  {registered, []}
+ ]}.
