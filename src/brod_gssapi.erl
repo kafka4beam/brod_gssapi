@@ -4,7 +4,6 @@
 %% @end
 %%%-------------------------------------------------------------------
 -module(brod_gssapi).
--behavior(brod_auth_backend).
 
 -include_lib("brod_gssapi/include/brod_gssapi.hrl").
 
