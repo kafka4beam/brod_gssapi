@@ -36,7 +36,7 @@ auth(Host, Sock, Mod, _ClientId, Timeout, _SaslOpts = {_Method = gssapi, Keytab,
             SaslRes =
                 case do_while(StartCliFun, CondFun) of
                     SomeRes when SomeRes /= ?SASL_OK andalso SomeRes /= ?SASL_CONTINUE ->
-                        {sasl_auth_error, SomeRes};
+                        {error, SomeRes};
                     Other ->
                         Other
                 end,
@@ -47,7 +47,7 @@ auth(Host, Sock, Mod, _ClientId, Timeout, _SaslOpts = {_Method = gssapi, Keytab,
                     sasl_recv(Mod, Sock, Timeout)
             end;
         Other ->
-            {sasl_auth_error, Other}
+            {error, Other}
     end.
 
 sasl_recv(Mod, Sock, Timeout) ->
@@ -74,13 +74,13 @@ sasl_recv(Mod, Sock, Timeout) ->
                         ?SASL_CONTINUE ->
                             sasl_recv(Mod, Sock, Timeout);
                         Other ->
-                            {sasl_auth_error, Other}
+                            {error, Other}
                     end
             end;
         {error, closed} ->
-            {sasl_auth_error, bad_credentials};
+            {error, bad_credentials};
         Unexpected ->
-            {sasl_auth_error, Unexpected}
+            {error, Unexpected}
     end.
 
 %%====================================================================
