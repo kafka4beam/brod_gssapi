@@ -48,7 +48,7 @@
 %%%-------------------------------------------------------------------
 auth(Host, Sock, Mod, _ClientId, Timeout, _SaslOpts = {_Method = gssapi, Keytab, Principal}) ->
     ?SASL_OK = sasl_auth:sasl_client_init(),
-    {ok, _} = sasl_auth:kinit(Keytab, Principal),
+    {ok, _} = sasl_auth:kinit(ensure_binary(Keytab), ensure_binary(Principal)),
     ok = setopts(Sock, Mod, [{active, false}]),
     case sasl_auth:sasl_client_new(<<"kafka">>, list_to_binary(Host), Principal) of
         ?SASL_OK ->
@@ -117,6 +117,10 @@ sasl_recv(Mod, Sock, Timeout) ->
 %%====================================================================
 %% Internal functions
 %%====================================================================
+
+-spec ensure_binary(atom() | iodata()) -> binary().
+ensure_binary(Atom) when is_atom(Atom) -> atom_to_binary(Atom, utf8);
+ensure_binary(Str) -> iolist_to_binary(Str).
 
 do_while(Fun, CondFun) ->
     case CondFun(Fun()) of
