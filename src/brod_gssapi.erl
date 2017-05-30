@@ -5,9 +5,41 @@
 %%%-------------------------------------------------------------------
 -module(brod_gssapi).
 
--include_lib("brod_gssapi/include/brod_gssapi.hrl").
-
 -export([auth/6]).
+
+-define(SASL_CONTINUE,           1).
+-define(SASL_OK,                 0).
+-define(SASL_FAIL,              -1).
+-define(SASL_NOMEM,             -2).
+-define(SASL_BUFOVER,           -3).
+-define(SASL_NOMECH,            -4).
+-define(SASL_BADPROT,           -5).
+-define(SASL_NOTDONE,           -6).
+-define(SASL_BADPARAM,          -7).
+-define(SASL_TRYAGAIN,          -8).
+-define(SASL_BADMAC,	        -9).
+-define(SASL_NOTINIT,           -12).
+-define(SASL_INTERACT,          2).
+-define(SASL_BADSERV,           -10).
+-define(SASL_WRONGMECH,         -11).
+-define(SASL_BADAUTH,           -13).
+-define(SASL_NOAUTHZ,           -14).
+-define(SASL_TOOWEAK,           -15).
+-define(SASL_ENCRYPT,           -16).
+-define(SASL_TRANS,             -17).
+-define(SASL_EXPIRED,           -18).
+-define(SASL_DISABLED,          -19).
+-define(SASL_NOUSER,            -20).
+-define(SASL_BADVERS,           -23).
+-define(SASL_UNAVAIL,           -24).
+-define(SASL_NOVERIFY,          -26).
+-define(SASL_PWLOCK,            -21).
+-define(SASL_NOCHANGE,          -22).
+-define(SASL_WEAKPASS,          -27).
+-define(SASL_NOUSERPASS,        -28).
+-define(SASL_NEED_OLD_PASSWD,   -29).
+-define(SASL_CONSTRAINT_VIOLAT,	-30).
+-define(SASL_BADBINDING,        -32).
 
 %%%-------------------------------------------------------------------
 %% @doc
