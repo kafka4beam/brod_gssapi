@@ -1,5 +1,3 @@
-%%%-------------------------------------------------------------------
-%% @doc
 %% SASL GSSAPI auth backend for brod
 %% @end
 %%%-------------------------------------------------------------------
@@ -49,7 +47,8 @@
 auth(Host, Sock, Mod, _ClientId, Timeout, _SaslOpts = {_Method = gssapi, Keytab, Principal}) ->
     ?SASL_OK = sasl_auth:sasl_client_init(),
     {ok, _} = sasl_auth:kinit(ensure_binary(Keytab), ensure_binary(Principal)),
-    ok = setopts(Sock, Mod, [{active, false}]),
+    {ok, [{packet, OrigPacketOpt}]} = getopts(Sock, Mod, [packet]),
+    ok = setopts(Sock, Mod, [{active, false}, {packet, raw}]),
     case sasl_auth:sasl_client_new(<<"kafka">>, list_to_binary(Host), Principal) of
         ?SASL_OK ->
             sasl_auth:sasl_listmech(),
@@ -73,18 +72,18 @@ auth(Host, Sock, Mod, _ClientId, Timeout, _SaslOpts = {_Method = gssapi, Keytab,
                 end,
             case SaslRes of
                 ?SASL_OK ->
-                    ok = setopts(Sock, Mod, [{active, once}]);
+                    ok = setopts(Sock, Mod, [{active, once}, {packet, OrigPacketOpt}]);
                 ?SASL_CONTINUE ->
-                    sasl_recv(Mod, Sock, Timeout)
+                    sasl_recv(Mod, Sock, Timeout, OrigPacketOpt)
             end;
         Other ->
             {error, Other}
     end.
 
-sasl_recv(Mod, Sock, Timeout) ->
+sasl_recv(Mod, Sock, Timeout, OrigPacketOpt) ->
     case Mod:recv(Sock, 4, Timeout) of
         {ok, <<0:32>>} ->
-            ok = setopts(Sock, Mod, [{active, once}]);
+            ok = setopts(Sock, Mod, [{active, once}, {packet, OrigPacketOpt}]);
         {ok, <<BrokerTokenSize:32>>} ->
             case Mod:recv(Sock, BrokerTokenSize, Timeout) of
                 {ok, BrokerToken} ->
@@ -101,9 +100,9 @@ sasl_recv(Mod, Sock, Timeout) ->
                                  end,
                     case do_while(CliStepFun, CondFun) of
                         ?SASL_OK ->
-                            ok = setopts(Sock, Mod, [{active, once}]);
+                            ok = setopts(Sock, Mod, [{active, once}, {packet, OrigPacketOpt}]);
                         ?SASL_CONTINUE ->
-                            sasl_recv(Mod, Sock, Timeout);
+                            sasl_recv(Mod, Sock, Timeout, OrigPacketOpt);
                         Other ->
                             {error, Other}
                     end
@@ -130,6 +129,9 @@ do_while(Fun, CondFun) ->
 
 setopts(Sock, _Mod = gen_tcp, Opts) -> inet:setopts(Sock, Opts);
 setopts(Sock, _Mod = ssl, Opts)     ->  ssl:setopts(Sock, Opts).
+
+getopts(Sock, _Mod = gen_tcp, Opts) -> inet:getopts(Sock, Opts);
+getopts(Sock, _Mod = ssl, Opts)     ->  ssl:getopts(Sock, Opts).
 
 sasl_token(Challenge) ->
     <<(byte_size(Challenge)):32, Challenge/binary>>.
