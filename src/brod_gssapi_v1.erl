@@ -7,40 +7,6 @@
 
 -export([auth/6]).
 
--define(SASL_CONTINUE, 1).
--define(SASL_OK, 0).
--define(SASL_FAIL, -1).
--define(SASL_NOMEM, -2).
--define(SASL_BUFOVER, -3).
--define(SASL_NOMECH, -4).
--define(SASL_BADPROT, -5).
--define(SASL_NOTDONE, -6).
--define(SASL_BADPARAM, -7).
--define(SASL_TRYAGAIN, -8).
--define(SASL_BADMAC, -9).
--define(SASL_NOTINIT, -12).
--define(SASL_INTERACT, 2).
--define(SASL_BADSERV, -10).
--define(SASL_WRONGMECH, -11).
--define(SASL_BADAUTH, -13).
--define(SASL_NOAUTHZ, -14).
--define(SASL_TOOWEAK, -15).
--define(SASL_ENCRYPT, -16).
--define(SASL_TRANS, -17).
--define(SASL_EXPIRED, -18).
--define(SASL_DISABLED, -19).
--define(SASL_NOUSER, -20).
--define(SASL_BADVERS, -23).
--define(SASL_UNAVAIL, -24).
--define(SASL_NOVERIFY, -26).
--define(SASL_PWLOCK, -21).
--define(SASL_NOCHANGE, -22).
--define(SASL_WEAKPASS, -27).
--define(SASL_NOUSERPASS, -28).
--define(SASL_NEED_OLD_PASSWD, -29).
--define(SASL_CONSTRAINT_VIOLAT, -30).
--define(SASL_BADBINDING, -32).
-
 %%%-------------------------------------------------------------------
 %% @doc
 %% Returns 'ok' if authentication successfully completed. See spec in behavior
@@ -70,41 +36,33 @@ auth(
     _SaslOpts = {_Method = gssapi, Keytab, Principal}
 ) ->
     HandshakeVsn = 1,
-    ?SASL_OK = sasl_auth:sasl_client_init(),
-    {ok, _} = sasl_auth:kinit(ensure_binary(Keytab), ensure_binary(Principal)),
-
-    case sasl_auth:sasl_client_new(<<"kafka">>, list_to_binary(Host), Principal) of
-        ?SASL_OK ->
-            sasl_auth:sasl_listmech(),
-            CondFun =
-                fun
-                    (?SASL_INTERACT) ->
-                        continue;
-                    (Other) ->
-                        Other
-                end,
+    ok = sasl_auth:kinit(ensure_binary(Keytab), ensure_binary(Principal)),
+    case sasl_auth:client_new(<<"kafka">>, ensure_binary(Host), ensure_binary(Principal)) of
+        {ok, State} ->
             StartCliFun =
                 fun() ->
-                    {SaslRes, Token} = sasl_auth:sasl_client_start(),
-                    if
-                        SaslRes >= 0 ->
+                    case sasl_auth:client_start(State) of
+                        {ok, {SaslRes, Token}} ->
                             ok = handshake(
                                 Sock, Mod, Timeout, ClientId, <<"GSSAPI">>, HandshakeVsn
                             ),
-                            NewToken =
-                                send_sasl_token(Token, Sock, Mod, ClientId, Timeout, HandshakeVsn),
-                            {SaslRes, NewToken};
-                        true ->
-                            SaslRes
+                            case send_sasl_token(Token, Sock, Mod, ClientId, Timeout, HandshakeVsn) of  
+                                {error, _} = Error -> 
+                                    Error;
+                                NewToken  ->
+                                    {SaslRes, NewToken}
+                            end;
+                        Other ->
+                            Other
                     end
                 end,
-            case do_while(StartCliFun, CondFun) of
-                {?SASL_OK, _} ->
+            case do_while(StartCliFun) of
+                {ok, {sasl_ok, _}} ->
                     setopts(Sock, Mod, [{active, once}]);
-                {?SASL_CONTINUE, {error, Error}} ->
+                {error, {sasl_continue, {error, Error}}} ->
                     {error, Error};
-                {?SASL_CONTINUE, NewToken} ->
-                    sasl_recv(Mod, Sock, Timeout, ClientId, NewToken, HandshakeVsn);
+                {sasl_continue, NewToken} ->
+                    sasl_recv(State, Mod, Sock, Timeout, ClientId, NewToken, HandshakeVsn);
                 Other ->
                     Other
             end;
@@ -112,32 +70,24 @@ auth(
             {error, Other}
     end.
 
-sasl_recv(Mod, Sock, Timeout, ClientId, Challenge, HandshakeVsn) ->
-    CondFun =
-        fun
-            (?SASL_INTERACT) ->
-                continue;
-            (Other) ->
-                Other
-        end,
+sasl_recv(State, Mod, Sock, Timeout, ClientId, Challenge, HandshakeVsn) ->
     CliStepFun =
         fun() ->
-            {SaslRes, Token} = sasl_auth:sasl_client_step(Challenge),
-            if
-                SaslRes >= 0 ->
+            case sasl_auth:client_step(State, Challenge) of
+                {ok, {SaslRes, Token}} ->
                     NewToken = send_sasl_token(Token, Sock, Mod, ClientId, Timeout, HandshakeVsn),
                     {SaslRes, NewToken};
-                true ->
-                    SaslRes
+                Other ->
+                    Other
             end
         end,
-    case do_while(CliStepFun, CondFun) of
-        {?SASL_OK, _} ->
+    case do_while(CliStepFun) of
+        {sasl_ok, _} ->
             setopts(Sock, Mod, [{active, once}]);
-        {?SASL_CONTINUE, {error, Error}} ->
+        {sasl_continue, {error, Error}} ->
             {error, Error};
-        {?SASL_CONTINUE, NewToken} ->
-            sasl_recv(Mod, Sock, Timeout, ClientId, NewToken, HandshakeVsn);
+        {sasl_continue, NewToken} ->
+            sasl_recv(State, Mod, Sock, Timeout, ClientId, NewToken, HandshakeVsn);
         Other ->
             Other
     end.
@@ -149,13 +99,20 @@ sasl_recv(Mod, Sock, Timeout, ClientId, Challenge, HandshakeVsn) ->
 -spec ensure_binary(atom() | iodata()) -> binary().
 ensure_binary(Atom) when is_atom(Atom) ->
     atom_to_binary(Atom, utf8);
-ensure_binary(Str) ->
-    iolist_to_binary(Str).
+ensure_binary(Str) when is_list(Str) ->
+    iolist_to_binary(Str);
+ensure_binary(Bin) when is_binary(Bin) ->
+    Bin.
 
-do_while(Fun, CondFun) ->
-    case CondFun(Fun()) of
+maybe_interact_continue(sasl_interact) ->
+    continue;
+maybe_interact_continue(Other) ->
+    Other.
+
+do_while(Fun) ->
+    case maybe_interact_continue(Fun()) of
         continue ->
-            do_while(Fun, CondFun);
+            do_while(Fun);
         Other ->
             Other
     end.
@@ -166,10 +123,9 @@ setopts(Sock, _Mod = ssl, Opts) ->
     ssl:setopts(Sock, Opts).
 
 send_sasl_token(Challenge, Sock, Mod, ClientId, Timeout, HandshakeVsn) when
-    is_list(Challenge)
+    is_binary(Challenge)
 ->
-    Bytes = list_to_binary(Challenge),
-    Req = kpro_req_lib:make(sasl_authenticate, HandshakeVsn, [{auth_bytes, Bytes}]),
+    Req = kpro_req_lib:make(sasl_authenticate, HandshakeVsn, [{auth_bytes, Challenge}]),
     Rsp = kpro_lib:send_and_recv(Req, Sock, Mod, ClientId, Timeout),
 
     EC = kpro:find(error_code, Rsp),
