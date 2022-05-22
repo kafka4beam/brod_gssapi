@@ -1,8 +1,1 @@
-{"1.2.0",
-[{<<"sasl_auth">>,{pkg,<<"sasl_auth">>,<<"2.0.0">>},0}]}.
-[
-{pkg_hash,[
- {<<"sasl_auth">>, <<"4613F42982D4296389034E6EA373FC7ED0DBE37D0BCCBBF615646D573C05B9C4">>}]},
-{pkg_hash_ext,[
- {<<"sasl_auth">>, <<"633B53EA7AC6B0A047506F8B522EDE6348FE327327AA8F2E3B3FBB07E692B0EF">>}]}
-].
+[].

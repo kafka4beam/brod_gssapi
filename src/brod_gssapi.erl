@@ -7,39 +7,39 @@
 
 -export([auth/6]).
 
--define(SASL_CONTINUE,           1).
--define(SASL_OK,                 0).
--define(SASL_FAIL,              -1).
--define(SASL_NOMEM,             -2).
--define(SASL_BUFOVER,           -3).
--define(SASL_NOMECH,            -4).
--define(SASL_BADPROT,           -5).
--define(SASL_NOTDONE,           -6).
--define(SASL_BADPARAM,          -7).
--define(SASL_TRYAGAIN,          -8).
--define(SASL_BADMAC,	        -9).
--define(SASL_NOTINIT,           -12).
--define(SASL_INTERACT,          2).
--define(SASL_BADSERV,           -10).
--define(SASL_WRONGMECH,         -11).
--define(SASL_BADAUTH,           -13).
--define(SASL_NOAUTHZ,           -14).
--define(SASL_TOOWEAK,           -15).
--define(SASL_ENCRYPT,           -16).
--define(SASL_TRANS,             -17).
--define(SASL_EXPIRED,           -18).
--define(SASL_DISABLED,          -19).
--define(SASL_NOUSER,            -20).
--define(SASL_BADVERS,           -23).
--define(SASL_UNAVAIL,           -24).
--define(SASL_NOVERIFY,          -26).
--define(SASL_PWLOCK,            -21).
--define(SASL_NOCHANGE,          -22).
--define(SASL_WEAKPASS,          -27).
--define(SASL_NOUSERPASS,        -28).
--define(SASL_NEED_OLD_PASSWD,   -29).
--define(SASL_CONSTRAINT_VIOLAT,	-30).
--define(SASL_BADBINDING,        -32).
+-define(SASL_CONTINUE, 1).
+-define(SASL_OK, 0).
+-define(SASL_FAIL, -1).
+-define(SASL_NOMEM, -2).
+-define(SASL_BUFOVER, -3).
+-define(SASL_NOMECH, -4).
+-define(SASL_BADPROT, -5).
+-define(SASL_NOTDONE, -6).
+-define(SASL_BADPARAM, -7).
+-define(SASL_TRYAGAIN, -8).
+-define(SASL_BADMAC, -9).
+-define(SASL_NOTINIT, -12).
+-define(SASL_INTERACT, 2).
+-define(SASL_BADSERV, -10).
+-define(SASL_WRONGMECH, -11).
+-define(SASL_BADAUTH, -13).
+-define(SASL_NOAUTHZ, -14).
+-define(SASL_TOOWEAK, -15).
+-define(SASL_ENCRYPT, -16).
+-define(SASL_TRANS, -17).
+-define(SASL_EXPIRED, -18).
+-define(SASL_DISABLED, -19).
+-define(SASL_NOUSER, -20).
+-define(SASL_BADVERS, -23).
+-define(SASL_UNAVAIL, -24).
+-define(SASL_NOVERIFY, -26).
+-define(SASL_PWLOCK, -21).
+-define(SASL_NOCHANGE, -22).
+-define(SASL_WEAKPASS, -27).
+-define(SASL_NOUSERPASS, -28).
+-define(SASL_NEED_OLD_PASSWD, -29).
+-define(SASL_CONSTRAINT_VIOLAT, -30).
+-define(SASL_BADBINDING, -32).
 
 %%%-------------------------------------------------------------------
 %% @doc
@@ -53,7 +53,10 @@ auth(Host, Sock, Mod, _ClientId, Timeout, _SaslOpts = {_Method = gssapi, Keytab,
     case sasl_auth:sasl_client_new(<<"kafka">>, list_to_binary(Host), Principal) of
         ?SASL_OK ->
             sasl_auth:sasl_listmech(),
-            CondFun = fun(?SASL_INTERACT) -> continue; (Other) -> Other end,
+            CondFun = fun
+                (?SASL_INTERACT) -> continue;
+                (Other) -> Other
+            end,
             StartCliFun = fun() ->
                 {SaslRes, Token} = sasl_auth:sasl_client_start(),
                 if
@@ -63,7 +66,7 @@ auth(Host, Sock, Mod, _ClientId, Timeout, _SaslOpts = {_Method = gssapi, Keytab,
                     true ->
                         SaslRes
                 end
-                          end,
+            end,
             SaslRes =
                 case do_while(StartCliFun, CondFun) of
                     SomeRes when SomeRes /= ?SASL_OK andalso SomeRes /= ?SASL_CONTINUE ->
@@ -88,7 +91,10 @@ sasl_recv(Mod, Sock, Timeout) ->
         {ok, <<BrokerTokenSize:32>>} ->
             case Mod:recv(Sock, BrokerTokenSize, Timeout) of
                 {ok, BrokerToken} ->
-                    CondFun = fun(?SASL_INTERACT) -> continue; (Other) -> Other end,
+                    CondFun = fun
+                        (?SASL_INTERACT) -> continue;
+                        (Other) -> Other
+                    end,
                     CliStepFun = fun() ->
                         {SaslRes, Token} = sasl_auth:sasl_client_step(BrokerToken),
                         if
@@ -98,7 +104,7 @@ sasl_recv(Mod, Sock, Timeout) ->
                             true ->
                                 SaslRes
                         end
-                                 end,
+                    end,
                     case do_while(CliStepFun, CondFun) of
                         ?SASL_OK ->
                             ok = setopts(Sock, Mod, [{active, once}]);
@@ -129,7 +135,7 @@ do_while(Fun, CondFun) ->
     end.
 
 setopts(Sock, _Mod = gen_tcp, Opts) -> inet:setopts(Sock, Opts);
-setopts(Sock, _Mod = ssl, Opts)     ->  ssl:setopts(Sock, Opts).
+setopts(Sock, _Mod = ssl, Opts) -> ssl:setopts(Sock, Opts).
 
 sasl_token(Challenge) ->
     <<(byte_size(Challenge)):32, Challenge/binary>>.

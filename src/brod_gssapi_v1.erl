@@ -7,90 +7,142 @@
 
 -export([auth/6]).
 
+-type state() :: #{
+    host := string(),
+    sock := gen_tcp:socket() | ssl:sslsocket(),
+    transport_mod := gen_tcp | ssl,
+    client_id := binary(),
+    timeout := pos_integer(),
+    method := any(),
+    keytab := binary(),
+    principal := binary(),
+    mechanism := binary(),
+    sasl_context := binary(),
+    sasl_conn := sasl_auth:state() | undefined,
+    handshake_vsn := non_neg_integer()
+}.
+
 %%%-------------------------------------------------------------------
 %% @doc
 %% Returns 'ok' if authentication successfully completed. See spec in behavior
 %% @end
 % Observed Sequence of handshake is as follows:
 
-% a) After initial series of sasl_auth calls, you get a kerberos token with a status if auth succeeded or failed or it should be continued. We got and Token (1 continue, 0 done, -1 Fail)
-
-% b) On getting the token, we do handshake with Kafka using SaslHandshake call with GSSAPI mechanism. If Kafka supports GSSAPI mechanism, we are OK to move ahead
-
-% c) We send the token received in first step wrapped in Kafka Request using SaslAuthenticate, SaslAuthenticate returns a new token in its response, if successful.
-
-% d) We then send this new Token to sasl_auth using method (sasl_client_step)to continue, this method returns {1 , []} i.e. continue with empty token
-
-% e) We then send empty Token again to Kafka SaslAuthenticate wrapped in Kafka Request. We again get a Token in response, if successful
-
-% f) We then send this new Token to sasl_auth using method (sasl_client_step)to continue, this method returns {0 , Token} i.e. Successful Auth with a token
-
-% g) We sends this token to Kafka SaslAuthenticate wrapped in Kafka Request. Which if successful indicates a successful Handshake and authentication using Kerberos
-%%%-------------------------------------------------------------------
+-spec auth(
+    Host :: string(),
+    Sock :: gen_tcp:socket() | ssl:sslsocket(),
+    Mod :: gen_tcp | ssl,
+    ClientId :: binary(),
+    Timeout :: pos_integer(),
+    SaslOpts :: term()
+) -> ok | {error, Reason :: term()}.
 auth(
     Host,
     Sock,
     Mod,
     ClientId,
     Timeout,
-    _SaslOpts = {_Method = gssapi, Keytab, Principal}
+    Opts
 ) ->
     HandshakeVsn = 1,
-    ok = sasl_auth:kinit(ensure_binary(Keytab), ensure_binary(Principal)),
-    case sasl_auth:client_new(<<"kafka">>, ensure_binary(Host), ensure_binary(Principal)) of
-        {ok, State} ->
-            StartCliFun =
-                fun() ->
-                    case sasl_auth:client_start(State) of
-                        {ok, {SaslRes, Token}} ->
-                            ok = handshake(
-                                Sock, Mod, Timeout, ClientId, <<"GSSAPI">>, HandshakeVsn
-                            ),
-                            case send_sasl_token(Token, Sock, Mod, ClientId, Timeout, HandshakeVsn) of  
-                                {error, _} = Error -> 
-                                    Error;
-                                NewToken  ->
-                                    {SaslRes, NewToken}
-                            end;
-                        Other ->
-                            Other
-                    end
-                end,
-            case do_while(StartCliFun) of
-                {ok, {sasl_ok, _}} ->
-                    setopts(Sock, Mod, [{active, once}]);
-                {error, {sasl_continue, {error, Error}}} ->
-                    {error, Error};
-                {sasl_continue, NewToken} ->
-                    sasl_recv(State, Mod, Sock, Timeout, ClientId, NewToken, HandshakeVsn);
-                Other ->
-                    Other
+
+    State = new_state(Host, Sock, Mod, ClientId, HandshakeVsn, Timeout, Opts),
+    case auth_init(State) of
+        {ok, State1} ->
+            case auth_begin(State1) of
+                {ok, {sasl_ok, Challenge}} ->
+                    auth_finish(State1, Challenge);
+                {ok, {sasl_continue, Challenge}} ->
+                    case auth_continue(State1, Challenge) of
+                        {ok, {sasl_ok, Challenge1}} ->
+                            auth_finish(State1, Challenge1);
+                        Error ->
+                            Error
+                    end;
+                Error ->
+                    Error
             end;
-        Other ->
-            {error, Other}
+        Error ->
+            Error
     end.
 
-sasl_recv(State, Mod, Sock, Timeout, ClientId, Challenge, HandshakeVsn) ->
-    CliStepFun =
-        fun() ->
-            case sasl_auth:client_step(State, Challenge) of
-                {ok, {SaslRes, Token}} ->
-                    NewToken = send_sasl_token(Token, Sock, Mod, ClientId, Timeout, HandshakeVsn),
-                    {SaslRes, NewToken};
-                Other ->
-                    Other
-            end
-        end,
-    case do_while(CliStepFun) of
-        {sasl_ok, _} ->
-            setopts(Sock, Mod, [{active, once}]);
-        {sasl_continue, {error, Error}} ->
+-spec auth_init(State :: state()) -> {ok, state()} | {error, term()}.
+auth_init(#{keytab := Keytab, principal := Principal, host := Host} = State) ->
+    case sasl_auth:kinit(Keytab, Principal) of
+        ok ->
+            case sasl_auth:client_new(<<"kafka">>, Host, Principal) of
+                {ok, SaslConn} ->
+                    {ok, State#{sasl_conn => SaslConn}};
+                Error ->
+                    Error
+            end;
+        Error ->
+            Error
+    end.
+
+-spec auth_begin(State :: state()) -> {ok, term()} | {error, term()}.
+auth_begin(#{sasl_conn := Conn} = State) ->
+    case sasl_auth:client_start(Conn) of
+        {ok, SaslRes} ->
+            case handshake(State) of
+                ok ->
+                    {ok, SaslRes};
+                Error ->
+                    Error
+            end;
+        {error, {sasl_continue, {error, Error}}} ->
             {error, Error};
-        {sasl_continue, NewToken} ->
-            sasl_recv(State, Mod, Sock, Timeout, ClientId, NewToken, HandshakeVsn);
         Other ->
             Other
     end.
+
+-spec auth_continue(State :: state(), Challenge :: binary()) -> {ok, term()} | {error, term()}.
+auth_continue(#{sasl_conn := Conn} = State, Challenge) ->
+    case send_sasl_token(State, Challenge) of
+        {ok, Token} ->
+            case sasl_auth:client_step(Conn, Token) of
+                {ok, {sasl_continue, NextChallenge}} ->
+                    auth_continue(State, NextChallenge);
+                Other ->
+                    Other
+            end;
+        Error ->
+            Error
+    end.
+
+-spec auth_finish(State :: state(), Challenge :: binary()) -> ok | {error, term()}.
+auth_finish(State, Challenge) ->
+    case send_sasl_token(State, Challenge) of
+        {ok, _} ->
+            set_sock_opts(State, [{active, once}]);
+        Error ->
+            Error
+    end.
+
+-spec new_state(
+    Host :: string(),
+    Sock :: gen_tcp:socket() | ssl:sslsocket(),
+    Mod :: gen_tcp | ssl,
+    ClientId :: binary(),
+    HandshakeVsn :: non_neg_integer(),
+    Timeout :: pos_integer(),
+    SaslOpts :: term()
+) -> state().
+new_state(Host, Sock, Mod, ClientId, HandshakeVsn, Timeout, {Method, KeyTab, Principal}) ->
+    #{
+        host => Host,
+        sock => Sock,
+        transport_mod => Mod,
+        client_id => ClientId,
+        timeout => Timeout,
+        method => Method,
+        mechanism => <<"GSSAPI">>,
+        keytab => ensure_binary(KeyTab),
+        principal => ensure_binary(Principal),
+        sasl_context => <<"kafka">>,
+        handshake_vsn => HandshakeVsn,
+        sasl_conn => undefined
+    }.
 
 %%====================================================================
 %% Internal functions
@@ -104,44 +156,33 @@ ensure_binary(Str) when is_list(Str) ->
 ensure_binary(Bin) when is_binary(Bin) ->
     Bin.
 
-maybe_interact_continue(sasl_interact) ->
-    continue;
-maybe_interact_continue(Other) ->
-    Other.
-
-do_while(Fun) ->
-    case maybe_interact_continue(Fun()) of
-        continue ->
-            do_while(Fun);
-        Other ->
-            Other
-    end.
-
-setopts(Sock, _Mod = gen_tcp, Opts) ->
+-spec set_sock_opts(State :: state(), term()) -> ok | {error, inet:posix()}.
+set_sock_opts(#{sock := Sock, transport_mod := gen_tcp}, Opts) ->
     inet:setopts(Sock, Opts);
-setopts(Sock, _Mod = ssl, Opts) ->
+set_sock_opts(#{sock := Sock, transport_mod := ssl}, Opts) ->
     ssl:setopts(Sock, Opts).
 
-send_sasl_token(Challenge, Sock, Mod, ClientId, Timeout, HandshakeVsn) when
-    is_binary(Challenge)
-->
+-spec send_sasl_token(State :: state(), Challenge :: binary()) -> {ok, binary()} | {error, term()}.
+send_sasl_token(State, Challenge) ->
+    #{handshake_vsn := HandshakeVsn, timeout := Timeout} = State,
+    #{sock := Sock, transport_mod := Mod, client_id := ClientId} = State,
     Req = kpro_req_lib:make(sasl_authenticate, HandshakeVsn, [{auth_bytes, Challenge}]),
     Rsp = kpro_lib:send_and_recv(Req, Sock, Mod, ClientId, Timeout),
 
-    EC = kpro:find(error_code, Rsp),
-
-    case EC =:= no_error of
-        true ->
-            kpro:find(auth_bytes, Rsp);
-        false ->
+    case kpro:find(error_code, Rsp) of
+        no_error ->
+            {ok, kpro:find(auth_bytes, Rsp)};
+        _ ->
             {error, kpro:find(error_message, Rsp)}
     end.
 
-handshake(Sock, Mod, Timeout, ClientId, Mechanism, Vsn) ->
-    Req = kpro_req_lib:make(sasl_handshake, Vsn, [{mechanism, Mechanism}]),
+-spec handshake(State :: state()) -> ok | {error, binary() | term()}.
+handshake(State) ->
+    #{handshake_vsn := HandshakeVsn, mechanism := Mech, timeout := Timeout} = State,
+    #{sock := Sock, transport_mod := Mod, client_id := ClientId} = State,
+    Req = kpro_req_lib:make(sasl_handshake, HandshakeVsn, [{mechanism, Mech}]),
     Rsp = kpro_lib:send_and_recv(Req, Sock, Mod, ClientId, Timeout),
-    ErrorCode = kpro:find(error_code, Rsp),
-    case ErrorCode of
+    case kpro:find(error_code, Rsp) of
         no_error ->
             ok;
         unsupported_sasl_mechanism ->
@@ -149,13 +190,14 @@ handshake(Sock, Mod, Timeout, ClientId, Mechanism, Vsn) ->
             Msg = io_lib:format(
                 "sasl mechanism ~s is not enabled in "
                 "kafka, enabled mechanism(s): ~s",
-                [Mechanism, cs(EnabledMechanisms)]
+                [Mech, cs(EnabledMechanisms)]
             ),
             {error, iolist_to_binary(Msg)};
         Other ->
             {error, Other}
     end.
 
+-spec cs(list()) -> list().
 cs([]) ->
     "[]";
 cs([X]) ->
