@@ -8,7 +8,7 @@
 -export([auth/6]).
 
 -type state() :: #{
-    host := string(),
+    host := binary(),
     sock := gen_tcp:socket() | ssl:sslsocket(),
     transport_mod := gen_tcp | ssl,
     client_id := binary(),
@@ -27,7 +27,6 @@
 %% Returns 'ok' if authentication successfully completed. See spec in behavior
 %% @end
 % Observed Sequence of handshake is as follows:
-
 -spec auth(
     Host :: string(),
     Sock :: gen_tcp:socket() | ssl:sslsocket(),
@@ -83,13 +82,11 @@ auth_begin(#{sasl_conn := Conn} = State) ->
                 Error ->
                     Error
             end;
-        {error, {sasl_continue, {error, Error}}} ->
-            {error, Error};
         Other ->
             Other
     end.
 
--spec auth_continue(State :: state(), Challenge :: binary()) -> {ok, term()} | {error, term()}.
+-spec auth_continue(State :: state(), {atom(), Challenge :: binary()}) -> ok | {error, term()}.
 auth_continue(State, {sasl_ok, Challenge}) ->
     case send_sasl_token(State, Challenge) of
         {ok, _} ->
@@ -97,7 +94,6 @@ auth_continue(State, {sasl_ok, Challenge}) ->
         Error ->
             Error
     end;
-
 auth_continue(#{sasl_conn := Conn} = State, {sasl_continue, Challenge}) ->
     case send_sasl_token(State, Challenge) of
         {ok, Token} ->
@@ -122,7 +118,7 @@ auth_continue(#{sasl_conn := Conn} = State, {sasl_continue, Challenge}) ->
 ) -> state().
 new_state(Host, Sock, Mod, ClientId, HandshakeVsn, Timeout, {Method, KeyTab, Principal}) ->
     #{
-        host => Host,
+        host => ensure_binary(Host),
         sock => Sock,
         transport_mod => Mod,
         client_id => ClientId,
@@ -148,7 +144,8 @@ ensure_binary(Str) when is_list(Str) ->
 ensure_binary(Bin) when is_binary(Bin) ->
     Bin.
 
--spec set_sock_opts(State :: state(), term()) -> ok | {error, inet:posix()}.
+-dialyzer({nowarn_function, set_sock_opts/2}).
+-spec set_sock_opts(State :: state(), [gen_tcp:option()]) -> ok | {error, inet:posix()}.
 set_sock_opts(#{sock := Sock, transport_mod := gen_tcp}, Opts) ->
     inet:setopts(Sock, Opts);
 set_sock_opts(#{sock := Sock, transport_mod := ssl}, Opts) ->
@@ -168,7 +165,7 @@ send_sasl_token(State, Challenge) ->
             {error, kpro:find(error_message, Rsp)}
     end.
 
--spec handshake(State :: state()) -> ok | {error, binary() | term()}.
+-spec handshake(State :: state()) -> ok | {error, term()}.
 handshake(State) ->
     #{handshake_vsn := HandshakeVsn, mechanism := Mech, timeout := Timeout} = State,
     #{sock := Sock, transport_mod := Mod, client_id := ClientId} = State,
