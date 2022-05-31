@@ -50,15 +50,8 @@ auth(
     case auth_init(State) of
         {ok, State1} ->
             case auth_begin(State1) of
-                {ok, {sasl_ok, Challenge}} ->
-                    auth_finish(State1, Challenge);
-                {ok, {sasl_continue, Challenge}} ->
-                    case auth_continue(State1, Challenge) of
-                        {ok, {sasl_ok, Challenge1}} ->
-                            auth_finish(State1, Challenge1);
-                        Error ->
-                            Error
-                    end;
+                {ok, SaslRes} ->
+                    auth_continue(State1, SaslRes);
                 Error ->
                     Error
             end;
@@ -97,24 +90,23 @@ auth_begin(#{sasl_conn := Conn} = State) ->
     end.
 
 -spec auth_continue(State :: state(), Challenge :: binary()) -> {ok, term()} | {error, term()}.
-auth_continue(#{sasl_conn := Conn} = State, Challenge) ->
-    case send_sasl_token(State, Challenge) of
-        {ok, Token} ->
-            case sasl_auth:client_step(Conn, Token) of
-                {ok, {sasl_continue, NextChallenge}} ->
-                    auth_continue(State, NextChallenge);
-                Other ->
-                    Other
-            end;
-        Error ->
-            Error
-    end.
-
--spec auth_finish(State :: state(), Challenge :: binary()) -> ok | {error, term()}.
-auth_finish(State, Challenge) ->
+auth_continue(State, {sasl_ok, Challenge}) ->
     case send_sasl_token(State, Challenge) of
         {ok, _} ->
             set_sock_opts(State, [{active, once}]);
+        Error ->
+            Error
+    end;
+
+auth_continue(#{sasl_conn := Conn} = State, {sasl_continue, Challenge}) ->
+    case send_sasl_token(State, Challenge) of
+        {ok, Token} ->
+            case sasl_auth:client_step(Conn, Token) of
+                {ok, SaslRes} ->
+                    auth_continue(State, SaslRes);
+                Other ->
+                    Other
+            end;
         Error ->
             Error
     end.
@@ -190,17 +182,9 @@ handshake(State) ->
             Msg = io_lib:format(
                 "sasl mechanism ~s is not enabled in "
                 "kafka, enabled mechanism(s): ~s",
-                [Mech, cs(EnabledMechanisms)]
+                [Mech, string:join(EnabledMechanisms, ",")]
             ),
             {error, iolist_to_binary(Msg)};
         Other ->
             {error, Other}
     end.
-
--spec cs(list()) -> list().
-cs([]) ->
-    "[]";
-cs([X]) ->
-    X;
-cs([H | T]) ->
-    [H, "," | cs(T)].

@@ -21,6 +21,7 @@ all() ->
         error_on_handshake1,
         error_on_handshake2,
         error_on_send_sasl_token,
+        error_on_client_step,
         error_on_finish
     ].
 
@@ -70,11 +71,11 @@ simple(_Config) ->
             gen_tcp,
             <<"client_id">>,
             42,
-            {gssapi, "path/to/keytab", "principal"}
+            {gssapi, "path/to/keytab", principal}
         )
     ).
 
-simple_interact(_Config) ->
+simple_interact(_config) ->
     meck:expect(sasl_auth, kinit, fun(_, _) -> ok end),
     meck:expect(sasl_auth, client_new, fun(_, _, _) -> {ok, make_ref()} end),
     meck:expect(
@@ -99,16 +100,16 @@ simple_interact(_Config) ->
         client_step,
         fun(_, <<"auth_bytes">>) -> {ok, {sasl_ok, <<"token">>}} end
     ),
-    meck:expect(inet, setopts, fun(_, _) -> ok end),
+    meck:expect(ssl, setopts, fun(_, _) -> ok end),
     ?assertMatch(
         ok,
         brod_gssapi_v1:auth(
             "host",
             make_ref(),
-            gen_tcp,
+            ssl,
             <<"client_id">>,
             42,
-            {gssapi, "path/to/keytab", "principal"}
+            {gssapi, <<"path/to/keytab">>, "principal"}
         )
     ).
 
@@ -419,6 +420,45 @@ error_on_finish(_Config) ->
             {gssapi, "path/to/keytab", "principal"}
         )
     ).
+
+error_on_client_step(_config) ->
+    meck:expect(sasl_auth, kinit, fun(_, _) -> ok end),
+    meck:expect(sasl_auth, client_new, fun(_, _, _) -> {ok, make_ref()} end),
+    meck:expect(
+        sasl_auth,
+        client_start,
+        fun(_) -> {ok, {sasl_continue, <<"challenge">>}} end
+    ),
+    meck:expect(kpro_req_lib, make, fun(_, _, _) -> req end),
+    meck:expect(kpro_lib, send_and_recv, fun(_, _, _, _, _) -> rsp end),
+    meck:expect(
+        kpro,
+        find,
+        fun
+            (error_code, rsp) ->
+                no_error;
+            (auth_bytes, rsp) ->
+                <<"auth_bytes">>
+        end
+    ),
+    meck:expect(
+        sasl_auth,
+        client_step,
+        fun(_, <<"auth_bytes">>) -> {error, {sasl_fail, <<"oops">>}} end
+    ),
+    ?assertMatch(
+       {error, {sasl_fail, <<"oops">>}},
+        brod_gssapi_v1:auth(
+            "host",
+            make_ref(),
+            gen_tcp,
+            <<"client_id">>,
+            42,
+            {gssapi, "path/to/keytab", "principal"}
+        )
+    ).
+
+
 
 %%%%%%%%%%%%%%%%%%
 %%%  Helpers   %%%
