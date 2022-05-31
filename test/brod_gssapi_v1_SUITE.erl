@@ -243,7 +243,7 @@ error_on_client_start2(_Config) ->
     meck:expect(sasl_auth, client_new, fun(_, _, _) -> {ok, make_ref()} end),
     meck:expect(sasl_auth, client_start, fun(_) -> {error, {sasl_continue, {error, <<"42">>}}} end),
     ?assertMatch(
-        {error, <<"42">>},
+        {error, {sasl_continue, {error, <<"42">>}}},
         brod_gssapi_v1:auth(
             "host",
             make_ref(),
