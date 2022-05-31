@@ -18,10 +18,6 @@ jobs:
         rebar3: ['3.16.1']
     steps:
       - uses: actions/checkout@v2
-      - uses: erlef/setup-beam@v1
-        with:
-          otp-version: ${{matrix.otp}}
-          rebar3-version: ${{matrix.rebar3}}
       - name: Install system deps 
         run:
           sudo apt-get update && apt-get install -y \
@@ -36,6 +32,10 @@ jobs:
           libkrb5-dev \
           libsasl2-dev \
           libsasl2-modules-gssapi-mit
+      - uses: erlef/setup-beam@v1
+        with:
+          otp-version: ${{matrix.otp}}
+          rebar3-version: ${{matrix.rebar3}}
       - name: Static analysis
         run: rebar3 dialyzer
       - name: Common Tests
