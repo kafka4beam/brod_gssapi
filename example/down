@@ -1,0 +1,5 @@
+#!/usr/bin/env bash
+
+
+docker rm -f kafka kdc zookeeper client brod_client
+

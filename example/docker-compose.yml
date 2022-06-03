@@ -1,0 +1,108 @@
+version: "3.5"
+services:
+  kdc:
+    hostname: kdc.kerberos-demo.local
+    #domainname: kerberos_default
+    build: image/
+    container_name: kdc
+    # ports:
+    #   - 88:88
+    #   - 749:749
+    volumes:
+      - ./secret:/var/lib/secret
+      - ./kdc/krb5.conf:/etc/kdc/krb5.conf
+      - ./kdc/krb5.conf:/etc/krb5.conf
+      - ./kdc/run.sh:/usr/bin/run.sh
+    command: run.sh
+
+  zookeeper:
+    build: image/
+    container_name: zookeeper
+    hostname: zookeeper.kerberos-demo.local
+    #domainname: kerberos_default
+    depends_on:
+      - kdc
+    # Required to wait for the keytab to get generated
+    restart: on-failure
+    volumes:
+      - ./secret:/var/lib/secret
+      - ./kdc/krb5.conf:/etc/krb5.conf
+      - ./zookeeper/zookeeper.properties:/opt/kafka/config/zookeeper.properties
+      - ./zookeeper/zookeeper.sasl.jaas.config:/opt/kafka/config/zookeeper_server_jaas.conf
+      - ./zookeeper/run.sh:/usr/bin/run.sh
+    command: run.sh
+
+  kafka:
+    build: image/
+    container_name: kafka
+    hostname: kafka.kerberos-demo.local
+    #domainname: kerberos_default
+    depends_on:
+      - zookeeper
+      - kdc
+    # Required to wait for the keytab to get generated
+    restart: on-failure
+    environment:
+      - KAFKA_LOG4J_ROOT_LOGLEVEL=DEBUG
+      - KAFKA_TOOLS_LOG4J_LOGLEVEL=DEBUG
+    # ports:
+    #   - 9093:9093
+    volumes:
+      - ./secret:/var/lib/secret
+      - ./kdc/krb5.conf:/etc/krb5.conf
+      - ./kafka/server.properties:/opt/kafka/config/server.properties
+      - ./kafka/kafka.sasl.jaas.config:/opt/kafka/config/kafka_server_jaas.conf
+      - ./kafka/log4j.properties:/opt/kafka/config/log4j.properties
+      - ./kafka/run.sh:/usr/bin/run.sh
+    command: run.sh
+
+  client:
+    build: image/
+    container_name: client
+    hostname: client.kerberos-demo.local
+    #domainname: kerberos_default
+    environment:
+      - KAFKA_TOOLS_LOG4J_LOGLEVEL=DEBUG
+      - KAFKA_OPTS=-Djava.security.auth.login.config=/opt/kafka/config/client_jaas.conf
+    depends_on:
+      - kafka
+      - kdc
+    working_dir: /opt/kafka
+    # Required to wait for the keytab to get generated
+    volumes:
+      - ./client/consumer.properties:/opt/kafka/config/consumer.properties
+      - ./client/producer.properties:/opt/kafka/config/producer.properties
+      - ./client/command.properties:/opt/kafka/config/command.properties
+      - ./client/client.sasl.jaas.config:/opt/kafka/config/client_jaas.conf
+      - ./secret:/var/lib/secret
+      - ./kdc/krb5.conf:/etc/krb5.conf
+      - ./client/run.sh:/usr/bin/run.sh
+    command: run.sh
+
+  brod_client:
+    depends_on:
+      - zookeeper
+      - kdc
+      - kafka
+    build: image/
+    hostname: brod_client.kerberos-demo.local
+    container_name: brod_client
+    working_dir: /opt/brod_gssapi/example/brod_client
+    command: 
+    volumes:
+      - ./client/consumer.properties:/opt/kafka/config/consumer.properties
+      - ./client/producer.properties:/opt/kafka/config/producer.properties
+      - ./client/command.properties:/opt/kafka/config/command.properties
+      - ./client/client.sasl.jaas.config:/opt/kafka/config/client_jaas.conf
+      - ./secret:/var/lib/secret
+      - ./kdc/krb5.conf:/etc/krb5.conf
+      - ./brod_client/compile_run.sh:/usr/bin/run.sh
+      - ./../:/opt/brod_gssapi
+    command: run.sh
+
+volumes:
+  secret: {}
+
+networks:
+  default:
+    name: kerberos-demo.local
