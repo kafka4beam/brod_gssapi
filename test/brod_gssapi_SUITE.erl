@@ -1,4 +1,4 @@
--module(brod_gssapi_v1_SUITE).
+-module(brod_gssapi_SUITE).
 
 -compile(export_all).
 
@@ -65,9 +65,10 @@ simple(_Config) ->
     meck:expect(inet, setopts, fun(_, _) -> ok end),
     ?assertMatch(
         ok,
-        brod_gssapi_v1:auth(
+        brod_gssapi:auth(
             "host",
             make_ref(),
+            1,
             gen_tcp,
             <<"client_id">>,
             42,
@@ -103,9 +104,10 @@ simple_interact(_config) ->
     meck:expect(ssl, setopts, fun(_, _) -> ok end),
     ?assertMatch(
         ok,
-        brod_gssapi_v1:auth(
+        brod_gssapi:auth(
             "host",
             make_ref(),
+            1,
             ssl,
             <<"client_id">>,
             42,
@@ -182,9 +184,10 @@ simple_interact_two(_Config) ->
     meck:expect(inet, setopts, fun(_, _) -> ok end),
     ?assertMatch(
         ok,
-        brod_gssapi_v1:auth(
+        brod_gssapi:auth(
             "host",
             make_ref(),
+            1,
             gen_tcp,
             <<"client_id">>,
             42,
@@ -196,9 +199,10 @@ error_on_kinit(_Config) ->
     meck:expect(sasl_auth, kinit, fun(_, _) -> {error, {"kinit failed", 42, "description"}} end),
     ?assertMatch(
         {error, {"kinit failed", 42, "description"}},
-        brod_gssapi_v1:auth(
+        brod_gssapi:auth(
             "host",
             make_ref(),
+            1,
             gen_tcp,
             <<"client_id">>,
             42,
@@ -209,12 +213,12 @@ error_on_kinit(_Config) ->
 error_on_client_new(_Config) ->
     meck:expect(sasl_auth, kinit, fun(_, _) -> ok end),
     meck:expect(sasl_auth, client_new, fun(_, _, _) -> {error, {sasl_fail, "error msg"}} end),
-    %% TODO: Change code tgo not return a double error tuple
     ?assertMatch(
         {error, {sasl_fail, "error msg"}},
-        brod_gssapi_v1:auth(
+        brod_gssapi:auth(
             "host",
             make_ref(),
+            1,
             gen_tcp,
             <<"client_id">>,
             42,
@@ -228,9 +232,10 @@ error_on_client_start(_Config) ->
     meck:expect(sasl_auth, client_start, fun(_) -> {error, {sasl_fail, <<"error">>}} end),
     ?assertMatch(
         {error, {sasl_fail, <<"error">>}},
-        brod_gssapi_v1:auth(
+        brod_gssapi:auth(
             "host",
             make_ref(),
+            1,
             gen_tcp,
             <<"client_id">>,
             42,
@@ -244,9 +249,10 @@ error_on_client_start2(_Config) ->
     meck:expect(sasl_auth, client_start, fun(_) -> {error, {sasl_continue, {error, <<"42">>}}} end),
     ?assertMatch(
         {error, {sasl_continue, {error, <<"42">>}}},
-        brod_gssapi_v1:auth(
+        brod_gssapi:auth(
             "host",
             make_ref(),
+            1,
             gen_tcp,
             <<"client_id">>,
             42,
@@ -267,9 +273,10 @@ error_on_handshake1(_Config) ->
     %% TODO: Fix return in code
     ?assertMatch(
         {error, 42},
-        brod_gssapi_v1:auth(
+        brod_gssapi:auth(
             "host",
             make_ref(),
+            1,
             gen_tcp,
             <<"client_id">>,
             42,
@@ -288,10 +295,12 @@ error_on_handshake2(_Config) ->
         (enabled_mechanisms, rsp) -> ["foo", "bar", "baz"]
     end),
     ?assertMatch(
-        {error, <<"sasl mechanism GSSAPI is not enabled in kafka, enabled mechanism(s): foo,bar,baz">>},
-        brod_gssapi_v1:auth(
+        {error,
+            <<"sasl mechanism GSSAPI is not enabled in kafka, enabled mechanism(s): foo,bar,baz">>},
+        brod_gssapi:auth(
             "host",
             make_ref(),
+            1,
             gen_tcp,
             <<"client_id">>,
             42,
@@ -341,9 +350,10 @@ error_on_send_sasl_token(_Config) ->
 
     ?assertMatch(
         {error, <<"everything">>},
-        brod_gssapi_v1:auth(
+        brod_gssapi:auth(
             "host",
             make_ref(),
+            1,
             gen_tcp,
             <<"client_id">>,
             42,
@@ -411,9 +421,10 @@ error_on_finish(_Config) ->
     meck:expect(inet, setopts, fun(_, _) -> ok end),
     ?assertMatch(
         {error, <<"everything">>},
-        brod_gssapi_v1:auth(
+        brod_gssapi:auth(
             "host",
             make_ref(),
+            1,
             gen_tcp,
             <<"client_id">>,
             42,
@@ -447,18 +458,17 @@ error_on_client_step(_config) ->
         fun(_, <<"auth_bytes">>) -> {error, {sasl_fail, <<"oops">>}} end
     ),
     ?assertMatch(
-       {error, {sasl_fail, <<"oops">>}},
-        brod_gssapi_v1:auth(
+        {error, {sasl_fail, <<"oops">>}},
+        brod_gssapi:auth(
             "host",
             make_ref(),
+            1,
             gen_tcp,
             <<"client_id">>,
             42,
             {gssapi, "path/to/keytab", "principal"}
         )
     ).
-
-
 
 %%%%%%%%%%%%%%%%%%
 %%%  Helpers   %%%
