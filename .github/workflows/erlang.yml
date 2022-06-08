@@ -45,7 +45,16 @@ jobs:
         mv /tmp/.buildx-cache-new /tmp/.buildx-cache
     - name: Compile and run tests
       run: ./scripts/run_test_in_docker_container.sh
-    - name: Run Kafka GSSAPI (Kerberos) Authentication Example
+    - name: Run Kafka GSSAPI (Kerberos) Authentication Example (known working brod version)
       run: |
         cd example
         ./up BROD_GSSAPI_NO_DOCKER_IMAGE_BUILD
+    - name: Run Kafka GSSAPI (Kerberos) Authentication Example (latest official brod version)
+      run: |
+        cd example
+        ./test_send_receive_erlang.sh rebar.config_brod_latest
+    - name: Run Kafka GSSAPI (Kerberos) Authentication Example (brod master branch)
+      run: |
+        cd example
+        ./test_send_receive_erlang.sh rebar.config_brod_master
+

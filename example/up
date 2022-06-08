@@ -84,6 +84,8 @@ docker exec client bash -c "kinit -k -t /var/lib/secret/kafka-admin.key admin/fo
 
 docker exec client bash -c "kinit -k -t /var/lib/secret/kafka-admin.key admin/for-kafka && bin/kafka-topics.sh --bootstrap-server kafka:9093 --command-config /opt/kafka/config/command.properties --create --topic test"
 
+docker-compose up -d brod_client
+
 ./test_send_receive.sh
 
 ./test_send_receive_erlang.sh
@@ -93,8 +95,8 @@ RESULT=$?
 set +xe
 
 # Output example usage:
-echo "Example configuration to access kafka:"
-echo "-> docker-compose exec client bash -c 'kinit -k -t /var/lib/secret/kafka-client.key kafka_producer && ./bin/kafka-console-producer.sh --broker-list kafka:9093 --topic test --producer.config /opt/kafka/config/producer.properties'"
+echo "\n\n\nExample configuration to access kafka:\n\n"
+echo "-> docker-compose exec client bash -c 'kinit -k -t /var/lib/secret/kafka-client.key kafka_producer && ./bin/kafka-console-producer.sh --broker-list kafka:9093 --topic test --producer.config /opt/kafka/config/producer.properties'\n"
 echo "-> docker-compose exec client bash -c 'kinit -k -t /var/lib/secret/kafka-client.key kafka_consumer && ./bin/kafka-console-consumer.sh --bootstrap-server kafka:9093 --topic test --consumer.config /opt/kafka/config/consumer.properties --from-beginning'"
 echo 
 echo "Execute ./test_send_receive_erlang.sh to check if the Erlang Brod client works"

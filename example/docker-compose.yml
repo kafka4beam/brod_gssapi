@@ -84,15 +84,10 @@ services:
     hostname: brod_client.kerberos-demo.local
     container_name: brod_client
     working_dir: /opt/brod_gssapi/example/brod_client
-    command: 
     volumes:
-      - ./client/consumer.properties:/opt/kafka/config/consumer.properties
-      - ./client/producer.properties:/opt/kafka/config/producer.properties
-      - ./client/command.properties:/opt/kafka/config/command.properties
-      - ./client/client.sasl.jaas.config:/opt/kafka/config/client_jaas.conf
       - ./secret:/var/lib/secret
       - ./kdc/krb5.conf:/etc/krb5.conf
-      - ./brod_client/compile_run.sh:/usr/bin/run.sh
+      - ./brod_client/run.sh:/usr/bin/run.sh
       - ./../:/opt/brod_gssapi
     command: run.sh
 

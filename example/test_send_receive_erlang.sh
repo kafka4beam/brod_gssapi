@@ -8,7 +8,7 @@ echo CREATEING TEST TOPIC
 
 echo RUNNING BROD CLIENT
 
-docker-compose up brod_client  | tee brod_client.out
+docker-compose exec -T brod_client ./compile_run.sh "$@"| tee brod_client.out
 
 cat brod_client.out | grep SUCCESS
 
