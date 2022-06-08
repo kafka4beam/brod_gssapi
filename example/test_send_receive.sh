@@ -8,12 +8,12 @@ echo CREATEING TEST TOPIC
 
 # Send MESSAGE
 
-docker-compose exec client bash -c 'kinit -k -t /var/lib/secret/rig.key rig && echo "hello world, a message is sent to mytest" | ./bin/kafka-console-producer.sh --broker-list kafka:9093 --topic mytest --producer.config /opt/kafka/config/producer.properties'
+docker-compose exec -T client bash -c 'kinit -k -t /var/lib/secret/rig.key rig && echo "hello world, a message is sent to mytest" | ./bin/kafka-console-producer.sh --broker-list kafka:9093 --topic mytest --producer.config /opt/kafka/config/producer.properties'
 
 
 # Receive MESSAGE
 
-RES=`docker-compose exec client bash -c 'kinit -k -t /var/lib/secret/rig.key rig && ./bin/kafka-console-consumer.sh --bootstrap-server kafka:9093 --topic mytest --consumer.config /opt/kafka/config/consumer.properties --from-beginning --max-messages 1'`
+RES=`docker-compose exec -T client bash -c 'kinit -k -t /var/lib/secret/rig.key rig && ./bin/kafka-console-consumer.sh --bootstrap-server kafka:9093 --topic mytest --consumer.config /opt/kafka/config/consumer.properties --from-beginning --max-messages 1'`
 
 
 echo $RES

@@ -2,12 +2,8 @@ version: "3.5"
 services:
   kdc:
     hostname: kdc.kerberos-demo.local
-    #domainname: kerberos_default
-    build: image/
+    image: brod_gssapi_dockerfile:latest
     container_name: kdc
-    # ports:
-    #   - 88:88
-    #   - 749:749
     volumes:
       - ./secret:/var/lib/secret
       - ./kdc/krb5.conf:/etc/kdc/krb5.conf
@@ -16,7 +12,7 @@ services:
     command: run.sh
 
   zookeeper:
-    build: image/
+    image: brod_gssapi_dockerfile:latest
     container_name: zookeeper
     hostname: zookeeper.kerberos-demo.local
     #domainname: kerberos_default
@@ -33,7 +29,7 @@ services:
     command: run.sh
 
   kafka:
-    build: image/
+    image: brod_gssapi_dockerfile:latest
     container_name: kafka
     hostname: kafka.kerberos-demo.local
     #domainname: kerberos_default
@@ -57,7 +53,7 @@ services:
     command: run.sh
 
   client:
-    build: image/
+    image: brod_gssapi_dockerfile:latest
     container_name: client
     hostname: client.kerberos-demo.local
     #domainname: kerberos_default
@@ -80,11 +76,11 @@ services:
     command: run.sh
 
   brod_client:
+    image: brod_gssapi_dockerfile:latest
     depends_on:
       - zookeeper
       - kdc
       - kafka
-    build: image/
     hostname: brod_client.kerberos-demo.local
     container_name: brod_client
     working_dir: /opt/brod_gssapi/example/brod_client

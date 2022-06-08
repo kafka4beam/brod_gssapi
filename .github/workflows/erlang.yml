@@ -1,4 +1,4 @@
-name: Erlang CI
+name: Run Common Test Suites and Kafka GSSAPI (Kerberos) Example
 
 on:
   push:
@@ -45,3 +45,7 @@ jobs:
         mv /tmp/.buildx-cache-new /tmp/.buildx-cache
     - name: Compile and run tests
       run: ./scripts/run_test_in_docker_container.sh
+    - name: Run Kafka GSSAPI (Kerberos) Authentication Example
+      run: |
+        cd example
+        ./up BROD_GSSAPI_NO_DOCKER_IMAGE_BUILD
