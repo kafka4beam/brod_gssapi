@@ -1,0 +1,36 @@
+---
+name: test
+on:
+  push:
+    branches:
+      - master
+      - use-sasl-auth-2
+  pull_request:
+    types: [opened, synchronize]
+
+jobs:
+  test:
+    name: Erlang/OTP ${{matrix.otp}} / rebar3 ${{matrix.rebar3}}
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        otp: ['23', '24', '25']
+        rebar3: ['3.16.1']
+    steps:
+      - name: Install system deps 
+        run: |
+          sudo apt-get update 
+          sudo apt-get install -y --no-install-recommends \
+          libgssapi-krb5-2 \
+          libsasl2-modules \
+          libsasl2-dev \
+          libkrb5-3 \
+          libkrb5-dev \
+          libsasl2-modules-gssapi-mit
+      - uses: actions/checkout@v2
+      - uses: erlef/setup-beam@v1
+        with:
+          otp-version: ${{matrix.otp}}
+          rebar3-version: ${{matrix.rebar3}}
+      - name: Common Tests
+        run: rebar3 test

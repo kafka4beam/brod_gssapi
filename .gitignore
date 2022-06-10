@@ -15,4 +15,3 @@ logs
 _build
 .idea
 *.iml
-*.lock

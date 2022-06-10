@@ -1,8 +1,9 @@
 {application, brod_gssapi, [
     {description, "SASL GSSAPI auth plugin for brod"},
-    {vsn, "0.2.0"},
+    {vsn, "0.3.0"},
     {registered, []},
-    {applications, [kernel, stdlib, sasl_auth]},
+    {applications, [kernel, stdlib, sasl_auth, kafka_protocol]},
     {env, []},
-    {modules, []}
+    {modules, []},
+    {licenses, ["Apache-2.0"]}
 ]}.

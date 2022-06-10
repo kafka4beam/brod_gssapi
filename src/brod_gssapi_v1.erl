@@ -1,191 +1,175 @@
-%%%-------------------------------------------------------------------
-%% @doc
-%% SASL GSSAPI auth backend for brod
-%% @end
-%%%-------------------------------------------------------------------
+%% @private
 -module(brod_gssapi_v1).
 
--export([auth/6]).
+-export([auth/1, auth/6]).
 
--define(SASL_CONTINUE, 1).
--define(SASL_OK, 0).
--define(SASL_FAIL, -1).
--define(SASL_NOMEM, -2).
--define(SASL_BUFOVER, -3).
--define(SASL_NOMECH, -4).
--define(SASL_BADPROT, -5).
--define(SASL_NOTDONE, -6).
--define(SASL_BADPARAM, -7).
--define(SASL_TRYAGAIN, -8).
--define(SASL_BADMAC, -9).
--define(SASL_NOTINIT, -12).
--define(SASL_INTERACT, 2).
--define(SASL_BADSERV, -10).
--define(SASL_WRONGMECH, -11).
--define(SASL_BADAUTH, -13).
--define(SASL_NOAUTHZ, -14).
--define(SASL_TOOWEAK, -15).
--define(SASL_ENCRYPT, -16).
--define(SASL_TRANS, -17).
--define(SASL_EXPIRED, -18).
--define(SASL_DISABLED, -19).
--define(SASL_NOUSER, -20).
--define(SASL_BADVERS, -23).
--define(SASL_UNAVAIL, -24).
--define(SASL_NOVERIFY, -26).
--define(SASL_PWLOCK, -21).
--define(SASL_NOCHANGE, -22).
--define(SASL_WEAKPASS, -27).
--define(SASL_NOUSERPASS, -28).
--define(SASL_NEED_OLD_PASSWD, -29).
--define(SASL_CONSTRAINT_VIOLAT, -30).
--define(SASL_BADBINDING, -32).
+-define(HANDSHAKE_V1, 1).
 
-%%%-------------------------------------------------------------------
-%% @doc
-%% Returns 'ok' if authentication successfully completed. See spec in behavior
-%% @end
-% Observed Sequence of handshake is as follows:
+%%% Flow :
+%%%
+%%% Note any error is immediately returned back up the stack to kafka_protocol.
+%%%
+%%% -----------------------------------------------------------------
+%%% 1) Initialize a TGT cache for the specified principal via
+%%%    sasl_auth:kinit/2 and continue to step 2 if successfull.
+%%%
+%%% 2) Initial a new sasl context for the auth session and continue
+%%%    to step 3 if successful.
+%%%
+%%% 3) Select a mechanism (GSSAPI) and start a sasl auth session.
+%%%    A successful start returns our first sasl token which is used
+%%%    in step 5. Move forward to step 3 if successful.
+%%%
+%%% 4) We now perform a handshake with Kafka using the SaslHandshake call
+%%%    with GSSAPI mechanism (see references for detail).
+%%%    If Kafka supports GSSAPI mechanism, we are OK to move ahead to step 5.
+%%%
+%%% 5) At this point we we send the token received via sasl_auth in step 3
+%%%    to kafka. Kafka will respond with either a new token or an
+%%%    error. Continue to step 6 if a token was received.
+%%%
+%%% 6) Now we send the token received from kafka in step 5 to our first
+%%%    sasl_auth:client_step/2 call. If successfull, we get back
+%%%    `{sasl_continue, Token}` if successful and we may continue to
+%%%    step 7.
+%%%
+%%% 7. Now we simply repeat steps 4 and 6 until we sasl_auth:client_step/2
+%%%    returns `{sasl_ok, Token}' or we receive an error from either
+%%%    sasl_auth:client_step/2 or kafka.
+%%%
+%%% 8) Once we have received `{sasl_ok, Token}' from sasl_auth:client_step/2,
+%%%    we are done but need to since this last returned sasl token to kafka
+%%%    to ensure we are authenticated.
+%%%
+%%% -------------------------------------------------------------------
 
-% a) After initial series of sasl_auth calls, you get a kerberos token with a status if auth succeeded or failed or it should be continued. We got and Token (1 continue, 0 done, -1 Fail)
+%%% References :
+%%% The Kerberos V5 ("GSSAPI") SASL Mechnism - https://datatracker.ietf.org/doc/html/rfc4752
+%%% KIP-43 - https://cwiki.apache.org/confluence/display/KAFKA/KIP-43%3A+Kafka+SASL+enhancements
+%%% Introduction to SASL - https://docs.oracle.com/cd/E23824_01/html/819-2145/sasl.intro.20.html
 
-% b) On getting the token, we do handshake with Kafka using SaslHandshake call with GSSAPI mechanism. If Kafka supports GSSAPI mechanism, we are OK to move ahead
-
-% c) We send the token received in first step wrapped in Kafka Request using SaslAuthenticate, SaslAuthenticate returns a new token in its response, if successful.
-
-% d) We then send this new Token to sasl_auth using method (sasl_client_step)to continue, this method returns {1 , []} i.e. continue with empty token
-
-% e) We then send empty Token again to Kafka SaslAuthenticate wrapped in Kafka Request. We again get a Token in response, if successful
-
-% f) We then send this new Token to sasl_auth using method (sasl_client_step)to continue, this method returns {0 , Token} i.e. Successful Auth with a token
-
-% g) We sends this token to Kafka SaslAuthenticate wrapped in Kafka Request. Which if successful indicates a successful Handshake and authentication using Kerberos
-%%%-------------------------------------------------------------------
+%% For backwards compat with version <= 0.2
+-spec auth(
+    Host :: string(),
+    Sock :: gen_tcp:socket() | ssl:sslsocket(),
+    Mod :: gen_tcp | ssl,
+    ClientId :: binary(),
+    Timeout :: pos_integer(),
+    SaslOpts :: term()
+) -> ok | {error, Reason :: term()}.
 auth(
     Host,
     Sock,
     Mod,
     ClientId,
     Timeout,
-    _SaslOpts = {_Method = gssapi, Keytab, Principal}
+    Opts
 ) ->
-    HandshakeVsn = 1,
-    ?SASL_OK = sasl_auth:sasl_client_init(),
-    {ok, _} = sasl_auth:kinit(ensure_binary(Keytab), ensure_binary(Principal)),
+    State = brod_gssapi:new(Host, Sock, Mod, ClientId, ?HANDSHAKE_V1, Timeout, Opts),
+    auth(State).
 
-    case sasl_auth:sasl_client_new(<<"kafka">>, list_to_binary(Host), Principal) of
-        ?SASL_OK ->
-            sasl_auth:sasl_listmech(),
-            CondFun =
-                fun
-                    (?SASL_INTERACT) ->
-                        continue;
-                    (Other) ->
-                        Other
-                end,
-            StartCliFun =
-                fun() ->
-                    {SaslRes, Token} = sasl_auth:sasl_client_start(),
-                    if
-                        SaslRes >= 0 ->
-                            ok = handshake(
-                                Sock, Mod, Timeout, ClientId, <<"GSSAPI">>, HandshakeVsn
-                            ),
-                            NewToken =
-                                send_sasl_token(Token, Sock, Mod, ClientId, Timeout, HandshakeVsn),
-                            {SaslRes, NewToken};
-                        true ->
-                            SaslRes
-                    end
-                end,
-            case do_while(StartCliFun, CondFun) of
-                {?SASL_OK, _} ->
-                    setopts(Sock, Mod, [{active, once}]);
-                {?SASL_CONTINUE, {error, Error}} ->
-                    {error, Error};
-                {?SASL_CONTINUE, NewToken} ->
-                    sasl_recv(Mod, Sock, Timeout, ClientId, NewToken, HandshakeVsn);
+%%%-------------------------------------------------------------------
+%% @doc
+%% Returns 'ok' if authentication successfully completed. See spec in behavior
+%% @end
+% Observed Sequence of handshake is as follows:
+-spec auth(brod_gssapi:state()) -> ok | {error, Reason :: term()}.
+auth(State) ->
+    case auth_init(State) of
+        {ok, State1} ->
+            case auth_begin(State1) of
+                {ok, SaslRes} ->
+                    auth_continue(State1, SaslRes);
+                Error ->
+                    Error
+            end;
+        Error ->
+            Error
+    end.
+
+-spec auth_init(State :: brod_gssapi:state()) -> {ok, brod_gssapi:state()} | {error, term()}.
+auth_init(#{keytab := Keytab, principal := Principal, host := Host} = State) ->
+    case sasl_auth:kinit(Keytab, Principal) of
+        ok ->
+            case sasl_auth:client_new(<<"kafka">>, Host, Principal) of
+                {ok, SaslConn} ->
+                    {ok, State#{sasl_conn => SaslConn}};
+                Error ->
+                    Error
+            end;
+        Error ->
+            Error
+    end.
+
+-spec auth_begin(State :: brod_gssapi:state()) -> {ok, term()} | {error, term()}.
+auth_begin(#{sasl_conn := Conn} = State) ->
+    case sasl_auth:client_start(Conn) of
+        {ok, SaslRes} ->
+            case handshake(State) of
+                ok ->
+                    {ok, SaslRes};
+                Error ->
+                    Error
+            end;
+        Other ->
+            Other
+    end.
+
+-spec auth_continue(State :: brod_gssapi:state(), {atom(), Challenge :: binary()}) ->
+    ok | {error, term()}.
+auth_continue(State, {sasl_ok, Challenge}) ->
+    case send_sasl_token(State, Challenge) of
+        {ok, _} ->
+            set_sock_opts(State, [{active, once}]);
+        Error ->
+            Error
+    end;
+auth_continue(#{handshake_vsn := 1, sasl_conn := Conn} = State, {sasl_continue, Challenge}) ->
+    case send_sasl_token(State, Challenge) of
+        {ok, Token} ->
+            case sasl_auth:client_step(Conn, Token) of
+                {ok, SaslRes} ->
+                    auth_continue(State, SaslRes);
                 Other ->
                     Other
             end;
-        Other ->
-            {error, Other}
-    end.
-
-sasl_recv(Mod, Sock, Timeout, ClientId, Challenge, HandshakeVsn) ->
-    CondFun =
-        fun
-            (?SASL_INTERACT) ->
-                continue;
-            (Other) ->
-                Other
-        end,
-    CliStepFun =
-        fun() ->
-            {SaslRes, Token} = sasl_auth:sasl_client_step(Challenge),
-            if
-                SaslRes >= 0 ->
-                    NewToken = send_sasl_token(Token, Sock, Mod, ClientId, Timeout, HandshakeVsn),
-                    {SaslRes, NewToken};
-                true ->
-                    SaslRes
-            end
-        end,
-    case do_while(CliStepFun, CondFun) of
-        {?SASL_OK, _} ->
-            setopts(Sock, Mod, [{active, once}]);
-        {?SASL_CONTINUE, {error, Error}} ->
-            {error, Error};
-        {?SASL_CONTINUE, NewToken} ->
-            sasl_recv(Mod, Sock, Timeout, ClientId, NewToken, HandshakeVsn);
-        Other ->
-            Other
+        Error ->
+            Error
     end.
 
 %%====================================================================
 %% Internal functions
 %%====================================================================
 
--spec ensure_binary(atom() | iodata()) -> binary().
-ensure_binary(Atom) when is_atom(Atom) ->
-    atom_to_binary(Atom, utf8);
-ensure_binary(Str) ->
-    iolist_to_binary(Str).
-
-do_while(Fun, CondFun) ->
-    case CondFun(Fun()) of
-        continue ->
-            do_while(Fun, CondFun);
-        Other ->
-            Other
-    end.
-
-setopts(Sock, _Mod = gen_tcp, Opts) ->
+-dialyzer({nowarn_function, set_sock_opts/2}).
+-spec set_sock_opts(State :: brod_gssapi:state(), [gen_tcp:option()]) -> ok | {error, inet:posix()}.
+set_sock_opts(#{sock := Sock, transport_mod := gen_tcp}, Opts) ->
     inet:setopts(Sock, Opts);
-setopts(Sock, _Mod = ssl, Opts) ->
+set_sock_opts(#{sock := Sock, transport_mod := ssl}, Opts) ->
     ssl:setopts(Sock, Opts).
 
-send_sasl_token(Challenge, Sock, Mod, ClientId, Timeout, HandshakeVsn) when
-    is_list(Challenge)
-->
-    Bytes = list_to_binary(Challenge),
-    Req = kpro_req_lib:make(sasl_authenticate, HandshakeVsn, [{auth_bytes, Bytes}]),
+-spec send_sasl_token(State :: brod_gssapi:state(), Challenge :: binary()) ->
+    {ok, binary()} | {error, term()}.
+send_sasl_token(State, Challenge) ->
+    #{handshake_vsn := HandshakeVsn, timeout := Timeout} = State,
+    #{sock := Sock, transport_mod := Mod, client_id := ClientId} = State,
+    Req = kpro_req_lib:make(sasl_authenticate, HandshakeVsn, [{auth_bytes, Challenge}]),
     Rsp = kpro_lib:send_and_recv(Req, Sock, Mod, ClientId, Timeout),
 
-    EC = kpro:find(error_code, Rsp),
-
-    case EC =:= no_error of
-        true ->
-            kpro:find(auth_bytes, Rsp);
-        false ->
+    case kpro:find(error_code, Rsp) of
+        no_error ->
+            {ok, kpro:find(auth_bytes, Rsp)};
+        _ ->
             {error, kpro:find(error_message, Rsp)}
     end.
 
-handshake(Sock, Mod, Timeout, ClientId, Mechanism, Vsn) ->
-    Req = kpro_req_lib:make(sasl_handshake, Vsn, [{mechanism, Mechanism}]),
+-spec handshake(State :: brod_gssapi:state()) -> ok | {error, term()}.
+handshake(State) ->
+    #{handshake_vsn := HandshakeVsn, mechanism := Mech, timeout := Timeout} = State,
+    #{sock := Sock, transport_mod := Mod, client_id := ClientId} = State,
+    Req = kpro_req_lib:make(sasl_handshake, HandshakeVsn, [{mechanism, Mech}]),
     Rsp = kpro_lib:send_and_recv(Req, Sock, Mod, ClientId, Timeout),
-    ErrorCode = kpro:find(error_code, Rsp),
-    case ErrorCode of
+    case kpro:find(error_code, Rsp) of
         no_error ->
             ok;
         unsupported_sasl_mechanism ->
@@ -193,16 +177,9 @@ handshake(Sock, Mod, Timeout, ClientId, Mechanism, Vsn) ->
             Msg = io_lib:format(
                 "sasl mechanism ~s is not enabled in "
                 "kafka, enabled mechanism(s): ~s",
-                [Mechanism, cs(EnabledMechanisms)]
+                [Mech, string:join(EnabledMechanisms, ",")]
             ),
             {error, iolist_to_binary(Msg)};
         Other ->
             {error, Other}
     end.
-
-cs([]) ->
-    "[]";
-cs([X]) ->
-    X;
-cs([H | T]) ->
-    [H, "," | cs(T)].
