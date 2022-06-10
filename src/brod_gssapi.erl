@@ -70,7 +70,9 @@ auth(
 
 dispatch(#{handshake_vsn := 1} = State) ->
     brod_gssapi_v1:auth(State);
-dispatch(#{handshake_vsn := 0} = State) ->
+dispatch(#{handshake_vsn := 0} = _State) ->
+    {error, <<"v0 handshake not implemented">>};
+dispatch(#{handshake_vsn := undefined} = State) ->
     brod_gssapi_v0:auth(State);
 dispatch(_State) ->
     {error, undefined_handshake_vsn}.
