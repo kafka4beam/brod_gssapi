@@ -5,33 +5,48 @@
 
 -define(HANDSHAKE_V1, 1).
 
-%%% Flow
+%%% Flow :
+%%%
+%%% Note any error is immediately returned back up the stack to kafka_protocol.
+%%%
 %%% -----------------------------------------------------------------
-%%%  a) After initial series of sasl_auth calls, you get a kerberos token
-%%%     with a status if auth succeeded or failed or it should be continued.
-%%%     We got and Token (1 continue, 0 done, -1 Fail)
+%%% 1) Initialize a TGT cache for the specified principal via
+%%%    sasl_auth:kinit/2 and continue to step 2 if successfull.
 %%%
-%%% b) On getting the token, we do handshake with Kafka using SaslHandshake
-%%%    call with GSSAPI mechanism. If Kafka supports GSSAPI mechanism, we
-%%%    are OK to move ahead
-
-%%% c) We send the token received in first step wrapped in Kafka Request using
-%%%    SaslAuthenticate, SaslAuthenticate returns a new token in its response,
-%%%    if successful.
+%%% 2) Initial a new sasl context for the auth session and continue
+%%%    to step 3 if successful.
 %%%
-%%% d) We then send this new Token to sasl_auth using method (sasl_client_step)
-%%%    to continue, this method returns {1 , []} i.e. continue with empty token
-%%% e) We then send empty Token again to Kafka SaslAuthenticate wrapped in
-%%%    Kafka Request. We again get a Token in response, if successful.
+%%% 3) Select a mechanism (GSSAPI) and start a sasl auth session.
+%%%    A successful start returns our first sasl token which is used
+%%%    in step 5. Move forward to step 3 if successful.
 %%%
-%%% f) We then send this new Token to sasl_auth using method (sasl_client_step)
-%%%    to continue, this method returns {0 , Token} i.e. Successful Auth with a
-%%%    token.
+%%% 4) We now perform a handshake with Kafka using the SaslHandshake call
+%%%    with GSSAPI mechanism (see references for detail).
+%%%    If Kafka supports GSSAPI mechanism, we are OK to move ahead to step 5.
 %%%
-%%% g) We sends this token to Kafka SaslAuthenticate wrapped in Kafka Request.
-%%%    Which if successful indicates a successful Handshake and authentication
-%%%    using Kerberos.
+%%% 5) At this point we we send the token received via sasl_auth in step 3
+%%%    to kafka. Kafka will respond with either a new token or an
+%%%    error. Continue to step 6 if a token was received.
+%%%
+%%% 6) Now we send the token received from kafka in step 5 to our first
+%%%    sasl_auth:client_step/2 call. If successfull, we get back
+%%%    `{sasl_continue, Token}` if successful and we may continue to
+%%%    step 7.
+%%%
+%%% 7. Now we simply repeat steps 4 and 6 until we sasl_auth:client_step/2
+%%%    returns `{sasl_ok, Token}' or we receive an error from either
+%%%    sasl_auth:client_step/2 or kafka.
+%%%
+%%% 8) Once we have received `{sasl_ok, Token}' from sasl_auth:client_step/2,
+%%%    we are done but need to since this last returned sasl token to kafka
+%%%    to ensure we are authenticated.
+%%%
 %%% -------------------------------------------------------------------
+
+%%% References :
+%%% The Kerberos V5 ("GSSAPI") SASL Mechnism - https://datatracker.ietf.org/doc/html/rfc4752
+%%% KIP-43 - https://cwiki.apache.org/confluence/display/KAFKA/KIP-43%3A+Kafka+SASL+enhancements
+%%% Introduction to SASL - https://docs.oracle.com/cd/E23824_01/html/819-2145/sasl.intro.20.html
 
 %% For backwards compat with version <= 0.2
 -spec auth(
