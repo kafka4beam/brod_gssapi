@@ -1,4 +1,4 @@
-name: Erlang CI
+name: Run Common Test Suites and Kafka GSSAPI (Kerberos) Example
 
 on:
   push:
@@ -15,12 +15,46 @@ jobs:
 
     runs-on: ubuntu-latest
 
-    container:
-      image: erlang:22.0.7
-
     steps:
     - uses: actions/checkout@v3
-    - name: Compile
-      run: rebar3 compile
-    - name: Run tests
-      run: rebar3 do eunit, ct
+    - name: Set up Docker Buildx
+      uses: docker/setup-buildx-action@v1
+    - name: Cache register
+      uses: actions/cache@v2
+      with:
+        path: /tmp/.buildx-cache
+        key: ${{ runner.os }}-buildx-${{ hashFiles('./example/image/Dockerfile') }}
+    - name: Build Docker image
+      uses: docker/build-push-action@v2
+      with:
+        context: ./example/image/
+        file: ./example/image/Dockerfile
+        builder: ${{ steps.buildx.outputs.name }}
+        load: true
+        tags: brod_gssapi_dockerfile:latest
+        cache-from: type=local,src=/tmp/.buildx-cache
+        cache-to: type=local,dest=/tmp/.buildx-cache-new
+      # This ugly bit is necessary if you don't want your cache to grow forever
+      # till it hits GitHub's limit of 5GB.
+      # Temp fix
+      # https://github.com/docker/build-push-action/issues/252
+      # https://github.com/moby/buildkit/issues/1896
+    - name: Move cache
+      run: |
+        rm -rf /tmp/.buildx-cache
+        mv /tmp/.buildx-cache-new /tmp/.buildx-cache
+    - name: Compile and run tests
+      run: ./scripts/run_test_in_docker_container.sh
+    - name: Run Kafka GSSAPI (Kerberos) Authentication Example (known working brod version)
+      run: |
+        cd example
+        ./up BROD_GSSAPI_NO_DOCKER_IMAGE_BUILD
+    - name: Run Kafka GSSAPI (Kerberos) Authentication Example (latest official brod version)
+      run: |
+        cd example
+        ./test_send_receive_erlang.sh rebar.config_brod_latest
+    - name: Run Kafka GSSAPI (Kerberos) Authentication Example (brod master branch)
+      run: |
+        cd example
+        ./test_send_receive_erlang.sh rebar.config_brod_master
+

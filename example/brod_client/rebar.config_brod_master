@@ -1,0 +1,22 @@
+
+{erl_opts, [no_debug_info]}.
+
+{plugins, [{rebar3_path_deps, {git, "https://github.com/benoitc/rebar3_path_deps",
+                               {ref, "b68c8550bde5fc00e6b2849184b08e70bc015cb6"}}}]}.
+
+{deps, [{brod_gssapi, {path, "../../"}},
+        {brod, {git, "https://github.com/kafka4beam/brod.git",
+                     {branch, "master"}}}]}.
+
+{escript_incl_apps, [example, brod_gssapi, brod]}.
+
+{escript_main_app, example}.
+
+{escript_name, example}.
+
+{escript_emu_args, "%%! +sbtu +A1\n"}.
+
+%% Profiles
+{profiles, [{test,
+             [{erl_opts, [debug_info]}
+            ]}]}.
