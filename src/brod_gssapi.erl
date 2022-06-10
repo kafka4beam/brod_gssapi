@@ -15,7 +15,7 @@
     mechanism := binary(),
     sasl_context := binary(),
     sasl_conn := sasl_auth:state() | undefined,
-    handshake_vsn := non_neg_integer() | undefined
+    handshake_vsn := non_neg_integer()
 }.
 
 -export_type([state/0]).
@@ -70,7 +70,7 @@ auth(
 
 dispatch(#{handshake_vsn := 1} = State) ->
     brod_gssapi_v1:auth(State);
-dispatch(#{handshake_vsn := undefined} = State) ->
+dispatch(#{handshake_vsn := 0} = State) ->
     brod_gssapi_v0:auth(State);
 dispatch(_State) ->
     {error, undefined_handshake_vsn}.
