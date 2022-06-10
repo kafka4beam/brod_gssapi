@@ -1,8 +1,4 @@
-%%%-------------------------------------------------------------------
-%% @doc
-%% SASL GSSAPI auth backend for brod
-%% @end
-%%%-------------------------------------------------------------------
+%% @private
 -module(brod_gssapi).
 
 -export([auth/6, auth/7, new/7]).
@@ -19,10 +15,13 @@
     mechanism := binary(),
     sasl_context := binary(),
     sasl_conn := sasl_auth:state() | undefined,
-    handshake_vsn := non_neg_integer()
+    handshake_vsn := non_neg_integer() | undefined
 }.
 
 -export_type([state/0]).
+
+-define(SASL_CONTEXT, <<"kafka">>).
+-define(SASL_MECHANISM, <<"GSSAPI">>).
 
 %% For backwards compat with version <= 0.2
 -spec auth(
@@ -71,14 +70,10 @@ auth(
 
 dispatch(#{handshake_vsn := 1} = State) ->
     brod_gssapi_v1:auth(State);
-dispatch(#{handshake_vsn := 0} = State) ->
+dispatch(#{handshake_vsn := undefined} = State) ->
     brod_gssapi_v0:auth(State);
 dispatch(_State) ->
     {error, undefined_handshake_vsn}.
-
-%% Backwards compat where handshake isn't given
-%auth(Host, Sock, Mod, _ClientId, Timeout, _SaslOpts = {_Method = gssapi, Keytab, Principal}) ->
-%
 
 -spec new(
     Host :: string(),
@@ -97,10 +92,10 @@ new(Host, Sock, HandshakeVsn, Mod, ClientId, Timeout, {Method, KeyTab, Principal
         client_id => ClientId,
         timeout => Timeout,
         method => Method,
-        mechanism => <<"GSSAPI">>,
+        mechanism => ?SASL_MECHANISM,
         keytab => ensure_binary(KeyTab),
         principal => ensure_binary(Principal),
-        sasl_context => <<"kafka">>,
+        sasl_context => ?SASL_CONTEXT,
         handshake_vsn => HandshakeVsn,
         sasl_conn => undefined
     }.

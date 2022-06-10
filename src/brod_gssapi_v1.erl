@@ -1,13 +1,37 @@
-%%%-------------------------------------------------------------------
-%% @doc
-%% SASL GSSAPI auth backend for brod
-%% @end
-%%%-------------------------------------------------------------------
+%% @private
 -module(brod_gssapi_v1).
 
 -export([auth/1, auth/6]).
 
 -define(HANDSHAKE_V1, 1).
+
+%%% Flow
+%%% -----------------------------------------------------------------
+%%%  a) After initial series of sasl_auth calls, you get a kerberos token
+%%%     with a status if auth succeeded or failed or it should be continued.
+%%%     We got and Token (1 continue, 0 done, -1 Fail)
+%%%
+%%% b) On getting the token, we do handshake with Kafka using SaslHandshake
+%%%    call with GSSAPI mechanism. If Kafka supports GSSAPI mechanism, we
+%%%    are OK to move ahead
+
+%%% c) We send the token received in first step wrapped in Kafka Request using
+%%%    SaslAuthenticate, SaslAuthenticate returns a new token in its response,
+%%%    if successful.
+%%%
+%%% d) We then send this new Token to sasl_auth using method (sasl_client_step)
+%%%    to continue, this method returns {1 , []} i.e. continue with empty token
+%%% e) We then send empty Token again to Kafka SaslAuthenticate wrapped in
+%%%    Kafka Request. We again get a Token in response, if successful.
+%%%
+%%% f) We then send this new Token to sasl_auth using method (sasl_client_step)
+%%%    to continue, this method returns {0 , Token} i.e. Successful Auth with a
+%%%    token.
+%%%
+%%% g) We sends this token to Kafka SaslAuthenticate wrapped in Kafka Request.
+%%%    Which if successful indicates a successful Handshake and authentication
+%%%    using Kerberos.
+%%% -------------------------------------------------------------------
 
 %% For backwards compat with version <= 0.2
 -spec auth(
@@ -28,6 +52,7 @@ auth(
 ) ->
     State = brod_gssapi:new(Host, Sock, Mod, ClientId, ?HANDSHAKE_V1, Timeout, Opts),
     auth(State).
+
 %%%-------------------------------------------------------------------
 %% @doc
 %% Returns 'ok' if authentication successfully completed. See spec in behavior

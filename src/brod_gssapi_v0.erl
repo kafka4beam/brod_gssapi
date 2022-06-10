@@ -1,19 +1,9 @@
-%%%-------------------------------------------------------------------
-%% @doc
-%% SASL GSSAPI auth backend for brod
-%% @end
-%%%-------------------------------------------------------------------
+%% @private
 -module(brod_gssapi_v0).
 
 -export([auth/6]).
 
 -define(HANDSHAKE_V0, 0).
-
-%%%-------------------------------------------------------------------
-%% @doc
-%% Returns 'ok' if authentication successfully completed. See spec in behavior
-%% @end
-%%%-------------------------------------------------------------------
 
 %% For backwards compat with version <= 0.2
 -spec auth(
