@@ -1,6 +1,8 @@
 %% @private
 -module(brod_gssapi).
 
+-on_load(init/0).
+
 -export([auth/6, auth/7, new/7]).
 
 -type state() :: #{
@@ -73,7 +75,15 @@ dispatch(#{handshake_vsn := 1} = State) ->
 dispatch(#{handshake_vsn := 0} = _State) ->
     {error, <<"v0 handshake not implemented">>};
 dispatch(#{handshake_vsn := undefined} = State) ->
-    brod_gssapi_v0:auth(State);
+    DefaultAuthModuleHandshakeVSNUndefined =
+        application:get_env(brod_gssapi,
+                            default_auth_module_handshake_vsn_undefined,
+                            brod_gssapi_v0),
+    NewState =
+        case DefaultAuthModuleHandshakeVSNUndefined of
+            brod_gssapi_v1 -> State#{handshake_vsn => 1} 
+        end,
+    DefaultAuthModuleHandshakeVSNUndefined:auth(NewState);
 dispatch(_State) ->
     {error, undefined_handshake_vsn}.
 
@@ -109,3 +119,8 @@ ensure_binary(Str) when is_list(Str) ->
     iolist_to_binary(Str);
 ensure_binary(Bin) when is_binary(Bin) ->
     Bin.
+
+
+init() ->
+    application:load(brod_gssapi),
+    ok.
