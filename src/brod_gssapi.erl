@@ -15,7 +15,7 @@
     mechanism := binary(),
     sasl_context := binary(),
     sasl_conn := sasl_auth:state() | undefined,
-    handshake_vsn := non_neg_integer()
+    handshake_vsn := non_neg_integer() | undefined
 }.
 
 -export_type([state/0]).
