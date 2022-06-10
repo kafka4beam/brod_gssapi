@@ -40,7 +40,7 @@ auth(
     Timeout,
     Opts
 ) ->
-    auth(Host, Sock, Mod, ClientId, 0, Timeout, Opts).
+    auth(Host, Sock, Mod, ClientId, undefined, Timeout, Opts).
 
 %%%-------------------------------------------------------------------
 %% @doc
