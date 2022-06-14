@@ -17,7 +17,7 @@
     mechanism := binary(),
     sasl_context := binary(),
     sasl_conn := sasl_auth:state() | undefined,
-    handshake_vsn := non_neg_integer() | undefined
+    handshake_vsn := non_neg_integer() | legacy
 }.
 
 -export_type([state/0]).
@@ -42,7 +42,11 @@ auth(
     Timeout,
     Opts
 ) ->
-    auth(Host, Sock, undefined, Mod, ClientId, Timeout, Opts).
+    DefaultHandshakeVSN =
+        application:get_env(brod_gssapi,
+                            default_handshake_vsn,
+                            legacy),
+    auth(Host, Sock, DefaultHandshakeVSN, Mod, ClientId, Timeout, Opts).
 
 %%%-------------------------------------------------------------------
 %% @doc
@@ -74,16 +78,8 @@ dispatch(#{handshake_vsn := 1} = State) ->
     brod_gssapi_v1:auth(State);
 dispatch(#{handshake_vsn := 0} = _State) ->
     {error, <<"v0 handshake not implemented">>};
-dispatch(#{handshake_vsn := undefined} = State) ->
-    DefaultAuthModuleHandshakeVSNUndefined =
-        application:get_env(brod_gssapi,
-                            default_auth_module_handshake_vsn_undefined,
-                            brod_gssapi_v0),
-    NewState =
-        case DefaultAuthModuleHandshakeVSNUndefined of
-            brod_gssapi_v1 -> State#{handshake_vsn => 1} 
-        end,
-    DefaultAuthModuleHandshakeVSNUndefined:auth(NewState);
+dispatch(#{handshake_vsn := legacy} = State) ->
+    brod_gssapi_v0:auth(State);
 dispatch(_State) ->
     {error, undefined_handshake_vsn}.
 
