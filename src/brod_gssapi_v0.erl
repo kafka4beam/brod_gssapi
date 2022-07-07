@@ -22,7 +22,7 @@ auth(
     Timeout,
     Opts
 ) ->
-    State = brod_gssapi:new(Host, Sock, Mod, ClientId, ?HANDSHAKE_V0, Timeout, Opts),
+    State = brod_gssapi:new(Host, Sock, ?HANDSHAKE_V0, Mod, ClientId, Timeout, Opts),
     auth(State).
 %
 auth(State) ->
