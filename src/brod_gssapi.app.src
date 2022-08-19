@@ -1,6 +1,6 @@
 {application, brod_gssapi, [
     {description, "SASL GSSAPI auth plugin for brod"},
-    {vsn, "0.3.0"},
+    {vsn, "git"},
     {registered, []},
     {applications, [kernel, stdlib, sasl_auth, kafka_protocol]},
     {env, []},
