@@ -1,8 +1,8 @@
 {"1.2.0",
-[{<<"sasl_auth">>,{pkg,<<"sasl_auth">>,<<"2.0.1">>},0}]}.
+[{<<"sasl_auth">>,{pkg,<<"sasl_auth">>,<<"2.0.2">>},0}]}.
 [
 {pkg_hash,[
- {<<"sasl_auth">>, <<"0CA8374C414D2C22E149AF65D7B5A5D5D79DFAD9E0540A8250410A3F10ED9AAD">>}]},
+ {<<"sasl_auth">>, <<"DF1321385FF044BA6F10D92B580662B5D31220FF8B2734FE48C9A5A078F1BB33">>}]},
 {pkg_hash_ext,[
- {<<"sasl_auth">>, <<"12B828477FB4575FD5BEF4AA3B00448A828A63BB221990EB3699D889F677BFCA">>}]}
+ {<<"sasl_auth">>, <<"F89CF18CCC1B5F0BC79AD5A1B9B4E5FEE73346B0E0CBEE346A7672777402300A">>}]}
 ].
