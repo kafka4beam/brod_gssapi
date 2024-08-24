@@ -59,6 +59,7 @@ auth_begin(#{sasl_conn := Conn} = State) ->
         {ok, SaslRes} ->
             auth_continue(State, SaslRes);
         Other ->
+            sasl_auth:client_done(Conn),
             Other
     end.
 
@@ -79,6 +80,7 @@ auth_continue(
                                 {ok, SaslRes} ->
                                     auth_continue(State, SaslRes);
                                 Other ->
+                                    sasl_auth:client_done(Conn),
                                     Other
                             end;
                         Error ->
