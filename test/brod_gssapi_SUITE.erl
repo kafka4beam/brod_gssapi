@@ -28,6 +28,7 @@ all() ->
 -define(MOCK_MODULES, [sasl_auth, inet, ssl, kpro_req_lib, kpro_lib, kpro]).
 
 init_per_suite(Config) ->
+    code:ensure_loaded(sasl_auth),
     meck:new(
         ?MOCK_MODULES,
         [passthrough, no_link, unstick]
