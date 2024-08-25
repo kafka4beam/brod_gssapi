@@ -127,7 +127,7 @@ auth_continue(#{sasl_conn := Conn} = State, {sasl_ok, Challenge}) ->
             Error
     end;
 auth_continue(#{handshake_vsn := 1, sasl_conn := Conn} = State, {sasl_continue, Challenge}) ->
-	case send_sasl_token(State, Challenge) of
+    case send_sasl_token(State, Challenge) of
         {ok, Token} ->
             case sasl_auth:client_step(Conn, Token) of
                 {ok, SaslRes} ->
