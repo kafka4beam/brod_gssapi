@@ -133,7 +133,7 @@ auth_continue(#{handshake_vsn := 1, sasl_conn := Conn} = State, {sasl_continue, 
                 {ok, SaslRes} ->
                     auth_continue(State, SaslRes);
                 Other ->
-                     sasl_auth:client_done(Conn),
+                    sasl_auth:client_done(Conn),
                     Other
             end;
         Error ->
