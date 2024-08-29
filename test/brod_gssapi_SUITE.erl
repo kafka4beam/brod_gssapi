@@ -28,6 +28,7 @@ all() ->
 -define(MOCK_MODULES, [sasl_auth, inet, ssl, kpro_req_lib, kpro_lib, kpro]).
 
 init_per_suite(Config) ->
+    code:ensure_loaded(sasl_auth),
     meck:new(
         ?MOCK_MODULES,
         [passthrough, no_link, unstick]
@@ -47,6 +48,7 @@ end_per_testcase(Tc, Config) ->
     Config.
 
 simple(_Config) ->
+    meck:expect(sasl_auth, client_done, fun(_) -> ok end),
     meck:expect(sasl_auth, kinit, fun(_, _) -> ok end),
     meck:expect(sasl_auth, client_new, fun(_, _, _) -> {ok, make_ref()} end),
     meck:expect(sasl_auth, client_start, fun(_) -> {ok, {sasl_ok, <<"token">>}} end),
@@ -77,6 +79,7 @@ simple(_Config) ->
     ).
 
 simple_interact(_config) ->
+    meck:expect(sasl_auth, client_done, fun(_) -> ok end),
     meck:expect(sasl_auth, kinit, fun(_, _) -> ok end),
     meck:expect(sasl_auth, client_new, fun(_, _, _) -> {ok, make_ref()} end),
     meck:expect(
@@ -116,6 +119,7 @@ simple_interact(_config) ->
     ).
 
 simple_interact_two(_Config) ->
+    meck:expect(sasl_auth, client_done, fun(_) -> ok end),
     meck:expect(sasl_auth, kinit, fun(_, _) -> ok end),
     meck:expect(sasl_auth, client_new, fun(_, _, _) -> {ok, make_ref()} end),
     meck:expect(
@@ -196,6 +200,7 @@ simple_interact_two(_Config) ->
     ).
 
 error_on_kinit(_Config) ->
+    meck:expect(sasl_auth, client_done, fun(_) -> ok end),
     meck:expect(sasl_auth, kinit, fun(_, _) -> {error, {"kinit failed", 42, "description"}} end),
     ?assertMatch(
         {error, {"kinit failed", 42, "description"}},
@@ -211,6 +216,7 @@ error_on_kinit(_Config) ->
     ).
 
 error_on_client_new(_Config) ->
+    meck:expect(sasl_auth, client_done, fun(_) -> ok end),
     meck:expect(sasl_auth, kinit, fun(_, _) -> ok end),
     meck:expect(sasl_auth, client_new, fun(_, _, _) -> {error, {sasl_fail, "error msg"}} end),
     ?assertMatch(
@@ -227,6 +233,7 @@ error_on_client_new(_Config) ->
     ).
 
 error_on_client_start(_Config) ->
+    meck:expect(sasl_auth, client_done, fun(_) -> ok end),
     meck:expect(sasl_auth, kinit, fun(_, _) -> ok end),
     meck:expect(sasl_auth, client_new, fun(_, _, _) -> {ok, make_ref()} end),
     meck:expect(sasl_auth, client_start, fun(_) -> {error, {sasl_fail, <<"error">>}} end),
@@ -244,6 +251,7 @@ error_on_client_start(_Config) ->
     ).
 
 error_on_client_start2(_Config) ->
+    meck:expect(sasl_auth, client_done, fun(_) -> ok end),
     meck:expect(sasl_auth, kinit, fun(_, _) -> ok end),
     meck:expect(sasl_auth, client_new, fun(_, _, _) -> {ok, make_ref()} end),
     meck:expect(sasl_auth, client_start, fun(_) -> {error, {sasl_continue, {error, <<"42">>}}} end),
@@ -261,6 +269,7 @@ error_on_client_start2(_Config) ->
     ).
 
 error_on_handshake1(_Config) ->
+    meck:expect(sasl_auth, client_done, fun(_) -> ok end),
     meck:expect(sasl_auth, kinit, fun(_, _) -> ok end),
     meck:expect(sasl_auth, client_new, fun(_, _, _) -> {ok, make_ref()} end),
     meck:expect(sasl_auth, client_start, fun(_) -> {ok, {sasl_ok, <<"token">>}} end),
@@ -285,6 +294,7 @@ error_on_handshake1(_Config) ->
     ).
 
 error_on_handshake2(_Config) ->
+    meck:expect(sasl_auth, client_done, fun(_) -> ok end),
     meck:expect(sasl_auth, kinit, fun(_, _) -> ok end),
     meck:expect(sasl_auth, client_new, fun(_, _, _) -> {ok, make_ref()} end),
     meck:expect(sasl_auth, client_start, fun(_) -> {ok, {sasl_ok, <<"token">>}} end),
@@ -308,6 +318,7 @@ error_on_handshake2(_Config) ->
         )
     ).
 error_on_send_sasl_token(_Config) ->
+    meck:expect(sasl_auth, client_done, fun(_) -> ok end),
     meck:expect(sasl_auth, kinit, fun(_, _) -> ok end),
     meck:expect(sasl_auth, client_new, fun(_, _, _) -> {ok, make_ref()} end),
     meck:expect(
@@ -362,6 +373,7 @@ error_on_send_sasl_token(_Config) ->
     ).
 
 error_on_finish(_Config) ->
+    meck:expect(sasl_auth, client_done, fun(_) -> ok end),
     meck:expect(sasl_auth, kinit, fun(_, _) -> ok end),
     meck:expect(sasl_auth, client_new, fun(_, _, _) -> {ok, make_ref()} end),
     meck:expect(
@@ -433,6 +445,7 @@ error_on_finish(_Config) ->
     ).
 
 error_on_client_step(_config) ->
+    meck:expect(sasl_auth, client_done, fun(_) -> ok end),
     meck:expect(sasl_auth, kinit, fun(_, _) -> ok end),
     meck:expect(sasl_auth, client_new, fun(_, _, _) -> {ok, make_ref()} end),
     meck:expect(

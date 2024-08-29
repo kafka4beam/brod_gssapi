@@ -43,6 +43,8 @@ RUN curl -O https://raw.githubusercontent.com/kerl/kerl/master/kerl
 
 RUN chmod a+x kerl
 
+ENV KERL_BUILD_DOCS=
+
 RUN ./kerl build 24.2.1
 
 RUN ./kerl install 24.2.1 /opt/kerl/24.2.1
@@ -100,7 +102,7 @@ RUN ln -s /opt/kafka_${SCALA_VERSION}-${KAFKA_VERSION} ${KAFKA_HOME}
 
 RUN mkdir -p /var/log/kerberos
 RUN mkdir p /etc/kdc
-RUN mkdir -p /var/kerberos/krb5kdc/ 
+RUN mkdir -p /var/kerberos/krb5kdc/
 
 
 WORKDIR /opt/kafka
